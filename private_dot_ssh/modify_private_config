@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+set -eu
+
+line='Include ~/.ssh/conf.d/zellij'
+content=$(cat)
+
+if printf '%s\n' "$content" | grep -Fqx "$line"; then
+    printf '%s' "$content"
+else
+    printf '%s\n' "$line"
+    printf '%s' "$content"
+fi

@@ -1,0 +1,9 @@
+[general]
+import = ["~/.config/alacritty/common.toml"]
+
+[window]
+title = "example · zellij"
+
+[terminal.shell]
+program = "ssh"
+args = ["-t", "user@example.com", "zellij attach --create main"]

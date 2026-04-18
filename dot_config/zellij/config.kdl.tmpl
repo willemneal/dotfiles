@@ -1,0 +1,5 @@
+{{- if eq .chezmoi.os "darwin" -}}
+{{ template "zellij-macos.kdl" . }}
+{{- else if eq .chezmoi.os "linux" -}}
+{{ template "zellij-linux.kdl" . }}
+{{- end -}}

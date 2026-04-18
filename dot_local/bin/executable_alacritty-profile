@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+set -eu
+
+PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+export PATH
+
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/alacritty/profiles"
+
+if [ ! -d "$dir" ]; then
+    printf 'no profiles dir: %s\n' "$dir" >&2
+    exit 1
+fi
+
+choice=$(
+    find "$dir" -maxdepth 1 -type f -name '*.toml' \
+        | sed "s|^$dir/||; s|\.toml$||" \
+        | sort \
+        | fzf --prompt='profile > ' --height=40% --reverse
+) || exit 0
+
+exec alacritty --config-file "$dir/$choice.toml"

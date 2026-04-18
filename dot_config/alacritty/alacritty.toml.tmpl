@@ -1,0 +1,22 @@
+[general]
+import = ["~/.config/alacritty/common.toml"]
+
+{{ if eq .chezmoi.os "darwin" -}}
+[window]
+decorations = "buttonless"
+option_as_alt = "Both"
+
+[[keyboard.bindings]]
+key = "P"
+mods = "Command|Shift"
+command = { program = "/Applications/Alacritty.app/Contents/MacOS/alacritty", args = ["-o", "window.level=\"AlwaysOnTop\"", "--title", "profile picker", "-e", "{{ .chezmoi.homeDir }}/.local/bin/alacritty-profile"] }
+{{- else if eq .chezmoi.os "linux" -}}
+[window.padding]
+x = 2
+y = 2
+
+[[keyboard.bindings]]
+key = "P"
+mods = "Control|Shift"
+command = { program = "alacritty", args = ["-o", "window.level=\"AlwaysOnTop\"", "--title", "profile picker", "-e", "alacritty-profile"] }
+{{- end }}

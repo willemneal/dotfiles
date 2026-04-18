@@ -1,0 +1,5 @@
+Host z/*
+    HostName moss
+    User willem
+    RequestTTY yes
+    RemoteCommand sh -c 'n=%n; "$HOME/.cargo/bin/zellij" attach -c "${n#z/}"'
