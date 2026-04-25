@@ -1,0 +1,45 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# Persist iogpu.wired_limit_mb across reboots so MLX has GPU headroom for
+# 70B+ models. macOS resets the limit to ~75% of physical at every boot;
+# this LaunchDaemon raises it back to ~95% (rounded down to a MiB boundary).
+# Requires sudo on first install — same UX as the Homebrew bootstrap.
+set -euo pipefail
+
+PLIST=/Library/LaunchDaemons/local.iogpu.wired-limit.plist
+phys_mb=$(($(sysctl -n hw.memsize) / 1024 / 1024))
+target=$(( (phys_mb * 95 / 100) / 1024 * 1024 ))
+
+if [ -f "$PLIST" ] && grep -q "iogpu.wired_limit_mb=${target}" "$PLIST"; then
+  echo "iogpu plist already current (target=${target} MiB of ${phys_mb} MiB physical)"
+  exit 0
+fi
+
+tmp=$(mktemp)
+cat > "$tmp" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.iogpu.wired-limit</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/sbin/sysctl</string>
+        <string>iogpu.wired_limit_mb=${target}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+sudo install -m 0644 -o root -g wheel "$tmp" "$PLIST"
+rm -f "$tmp"
+
+sudo launchctl bootout system "$PLIST" 2>/dev/null || true
+sudo launchctl bootstrap system "$PLIST"
+sudo sysctl "iogpu.wired_limit_mb=${target}"
+
+echo "iogpu.wired_limit_mb persisted at ${target} MiB (${phys_mb} MiB physical)"
+{{ end -}}

@@ -17,7 +17,7 @@ if [ ! -f "$PLAYGROUND/pyproject.toml" ]; then
   (
     cd "$PLAYGROUND"
     uv init --python 3.12 --no-readme --no-pin-python
-    uv add mlx mlx-lm huggingface-hub hf-transfer jupyter ipython rich
+    uv add mlx mlx-lm mlx-vlm huggingface-hub hf-transfer jupyter ipython rich
     # Fine-tuning (uncomment when needed):
     # uv add torch torchvision peft datasets accelerate transformers
   )
