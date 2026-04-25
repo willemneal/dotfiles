@@ -10,5 +10,13 @@ export HF_HUB_ENABLE_HF_TRANSFER=1
 export MODELS_DIR="$HOME/Models"
 # export HF_HOME="/Volumes/External/hf"
 
+# Lazy HF_TOKEN via 1Password — call `hf-login` (or `op signin` first if needed).
+# Adjust the op:// reference if your vault layout differs.
+hf-login() {
+  command -v op >/dev/null || { print -u2 "op (1Password CLI) not installed"; return 1; }
+  HF_TOKEN=$(op read "op://Personal/HuggingFace/token") || return $?
+  export HF_TOKEN
+}
+
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
 {{ end -}}

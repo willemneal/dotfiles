@@ -9,14 +9,16 @@ jobs:
         os: [darwin, linux]
         hostname: [mai, other]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
-      - name: Render every .tmpl
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - name: Render and shellcheck every .tmpl
         run: |
           set -e
           printf 'name="T"\nemail="t@e"\n[chezmoi]\nos="${{ matrix.os }}"\nhostname="${{ matrix.hostname }}"\n' > /tmp/o.toml
           CM="$HOME/.local/bin/chezmoi"
           for f in $(git ls-files '*.tmpl' | grep -v '^\.chezmoi\.toml\.tmpl$'); do
-            "$CM" execute-template --source="$PWD" --override-data-file=/tmp/o.toml < "$f" >/dev/null
+            "$CM" execute-template --source="$PWD" --override-data-file=/tmp/o.toml < "$f" > /tmp/rendered
+            if head -n1 /tmp/rendered | grep -q '^#!/usr/bin/env bash'; then shellcheck -s bash /tmp/rendered; fi
           done
           "$CM" execute-template --init --source="$PWD" -p name=T -p email=t@e < .chezmoi.toml.tmpl >/dev/null
