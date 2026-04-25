@@ -9,7 +9,10 @@ bootstrap — managed by [chezmoi](https://www.chezmoi.io).
 - [Zellij walkthrough](#zellij-walkthrough) — the long one
 - [Window management: AeroSpace + Karabiner](#window-management-aerospace--karabiner)
 - [Alacritty walkthrough](#alacritty-walkthrough)
+- [Neovim (LazyVim)](#neovim-lazyvim)
 - [Shell, git, and 1Password integrations](#shell-git-and-1password-integrations)
+- [Shell history (Atuin)](#shell-history-atuin)
+- [Prompt and runtime managers (starship, mise)](#prompt-and-runtime-managers-starship-mise)
 - [CLI replacements](#cli-replacements)
 - [Troubleshooting](#troubleshooting)
 
@@ -50,11 +53,17 @@ when their content hash changes.
 │   ├── zellij-macos.kdl                        thin wrapper → base
 │   └── zellij-linux.kdl                        adds default_layout "minimal" → base
 ├── dot_config/
+│   ├── aerospace/aerospace.toml                tiling WM bindings (Hyper prefix)
 │   ├── alacritty/
 │   │   ├── alacritty.toml.tmpl                 OS-branched window/keybinds + theme imports
 │   │   ├── common.toml                         shared keybinds
 │   │   ├── colors/catppuccin-mocha.toml        palette (matches zellij theme)
 │   │   └── profiles/                           SSH-launch profile fragments
+│   ├── atuin/config.toml                       SQLite history config + secret filter
+│   ├── karabiner/karabiner.json                Caps Lock → Esc/Hyper remap
+│   ├── mise/config.toml                        global runtime versions (node/go/bun/deno)
+│   ├── nvim/                                   LazyVim bootstrap (init.lua + lua/)
+│   ├── starship.toml                           Catppuccin Mocha prompt
 │   └── zellij/
 │       ├── config.kdl.tmpl                     picks macos or linux body
 │       └── layouts/minimal.kdl                 compact-bar only, Linux default
@@ -63,32 +72,39 @@ when their content hash changes.
 │   └── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
-├── dot_gitconfig.tmpl                          git + delta integration
+├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
 ├── run_once_before_010-install-homebrew.sh.tmpl
 ├── run_once_after_020-brew-bundle.sh.tmpl
 ├── run_once_after_030-ai-stack.sh.tmpl         uv + MLX playground (AI hosts)
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
-└── run_once_after_040-macos-defaults.sh.tmpl
+├── run_once_after_040-macos-defaults.sh.tmpl
+├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
+└── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs five ordered `run_once_` scripts:
+On macOS, `chezmoi apply` runs seven ordered `run_once_` scripts:
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
    isn't on PATH. On a truly fresh Mac this triggers the Xcode Command Line
    Tools GUI prompt; that's expected — let it finish, then re-run.
-2. **`020-brew-bundle`** — installs everything in `~/.Brewfile`: CLI essentials
-   (git, gh, jq, yq, fzf, direnv, zoxide, starship, neovim, tmux), Rust
-   replacements (ripgrep, fd, bat, eza), Rust extras (git-delta, dust, tokei,
-   hyperfine, bottom, gitui, just), terminal stack (alacritty, zellij), dev
-   (uv, mise, node), Rust toolchain (rustup, cargo-binstall), and productivity
-   casks (raycast, aerospace, karabiner-elements, 1password,
-   tailscale-app). On hosts in
-   `.chezmoidata.toml` `[hosts] ai_machines`: also `llama.cpp`, `ollama`,
-   `whisper-cpp`, `asitop`, and the `lm-studio` cask.
+2. **`020-brew-bundle`** — installs everything in `~/.Brewfile`:
+   - CLI essentials: git, gh, jq, yq, fzf, direnv, zoxide, starship, neovim,
+     tmux, **repomix**.
+   - Rust replacements: ripgrep, fd, bat, eza.
+   - Rust extras: git-delta, dust, tokei, hyperfine, bottom, gitui, just.
+   - Zsh enhancements: **zsh-autosuggestions**, **zsh-fast-syntax-highlighting**,
+     **atuin**.
+   - Terminal stack: alacritty, zellij.
+   - Dev: uv, mise, node.
+   - Rust toolchain: rustup, cargo-binstall.
+   - Productivity casks: raycast, **aerospace**, **karabiner-elements**,
+     1password, 1password-cli, tailscale-app.
+   - On hosts in `.chezmoidata.toml` `[hosts] ai_machines`: also llama.cpp,
+     ollama, whisper-cpp, asitop, **mactop**, and the lm-studio cask.
 3. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
    `~/.cache/huggingface`, `~/ai/playground`. `uv init`s the playground at
    Python 3.12 with `mlx`, `mlx-lm`, `mlx-vlm`, `huggingface-hub`,
@@ -101,12 +117,23 @@ On macOS, `chezmoi apply` runs five ordered `run_once_` scripts:
    for 70B+ models. **Needs sudo on first run.**
 5. **`040-macos-defaults`** — Finder visibility, fast key repeat, screenshots
    to `~/Desktop/Screenshots`, no `.DS_Store` on network/USB.
+6. **`045-time-machine`** *(host-gated)* — `tmutil addexclusion` for `~/Models`,
+   `~/.cache/huggingface`, `~/.cache/uv`, and `~/ai/playground/.venv`. These
+   are large and re-downloadable; backing them up wastes snapshots.
+7. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
+   `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
 
-After bootstrap you'll want one extra step:
+After bootstrap you'll want a few one-time setup steps:
 
 ```sh
-rustup default stable    # installs the actual Rust compiler/cargo
+rustup default stable        # install the actual Rust compiler/cargo
+atuin import auto            # ingest existing ~/.zsh_history into atuin
+nvim                         # first launch downloads LazyVim plugins (~10s)
 ```
+
+In Karabiner-Elements and AeroSpace, accept the macOS permission prompts on
+first launch (Input Monitoring, Accessibility). They both auto-start on login
+afterwards.
 
 Then run `mai-doctor` to confirm everything came up. It reports versions,
 playground state, ollama daemon reachability, HF auth, network reach to
@@ -394,6 +421,38 @@ Alacritty window running `~/.local/bin/alacritty-profile`, an fzf picker
 over `profiles/*.toml`. Pick one and a new Alacritty window opens that
 SSH-launches you into a remote Zellij session.
 
+## Neovim (LazyVim)
+
+`dot_config/nvim/` ships a thin LazyVim bootstrap:
+
+```
+dot_config/nvim/
+├── init.lua                       # one-line: require("config.lazy")
+└── lua/
+    ├── config/lazy.lua             # clones folke/lazy.nvim, configures distro
+    └── plugins/colorscheme.lua     # pins catppuccin-mocha
+```
+
+First `nvim` launch clones `lazy.nvim` and downloads the plugin set
+(~10 seconds). LazyVim's defaults give you Treesitter, LSP-zero-equivalent,
+telescope, which-key, gitsigns, oil.nvim, conform.nvim, and nvim-cmp out of
+the box.
+
+To enable language extras, uncomment lines in `lua/config/lazy.lua`:
+
+```lua
+-- { import = "lazyvim.plugins.extras.lang.python" },
+-- { import = "lazyvim.plugins.extras.lang.rust" },
+-- { import = "lazyvim.plugins.extras.lang.typescript" },
+```
+
+After the first launch, **commit `dot_config/nvim/lazy-lock.json`** so a fresh
+machine pins to the same plugin commits. Run `:Lazy sync` periodically to
+update; review and commit the lockfile diff.
+
+Pairs with `zellij-autolock`: opening nvim auto-locks Zellij's keybinds, so
+nothing collides.
+
 ## Shell, git, and 1Password integrations
 
 ### `dot_zshenv` (sourced for every shell)
@@ -413,9 +472,11 @@ SSH-launches you into a remote Zellij session.
 
 ### `dot_zshrc` (interactive shells)
 
-History (50 k entries, dedup, shared), `compinit`, conditional init for
-starship/zoxide/direnv/mise, fzf bindings, the CLI replacement aliases, and
-AI shortcuts (`hfd`, `play`, `jlab`).
+History (50 k entries, dedup, shared — supplemented by Atuin's SQLite store),
+`compinit`, conditional init for starship/zoxide/direnv/mise/atuin, fzf
+bindings, **zsh-autosuggestions + fast-syntax-highlighting** sourced after
+fzf (order matters), the CLI replacement aliases, and AI shortcuts (`hfd`,
+`play`, `jlab`).
 
 ### Hugging Face token
 
@@ -469,6 +530,64 @@ One-time setup on a fresh machine:
    `<your-email> ssh-ed25519 AAAA…` (so `git log --show-signature` works).
 4. Skip with a blank `signing_key` value during init if you don't want
    this — gitconfig falls back to unsigned commits.
+
+## Shell history (Atuin)
+
+Atuin replaces zsh's text-file `~/.zsh_history` with a SQLite store, plus a
+fuzzy-search UI. Wired into `dot_zshrc.tmpl` via:
+
+```sh
+command -v atuin >/dev/null && eval "$(atuin init zsh --disable-up-arrow)"
+```
+
+`--disable-up-arrow` keeps Up arrow as zsh's native per-session sequential
+recall. Atuin owns **`Ctrl+R`**, which pops a fuzzy search across all your
+history (cross-session, cross-directory, optionally cross-machine if you
+opt into sync via `atuin register`).
+
+`dot_config/atuin/config.toml` configures the UI (compact, single-Enter
+accept, no help line) and a `history_filter` regex list that drops these
+patterns *before* they're written to the database:
+
+- `op read…`, `op signin…`
+- `hf-login`, `tailscale-up`
+- `--token=…`, `--password=…`, `*api_key*`
+- `HF_TOKEN=…`, `TS_AUTHKEY=…`
+
+Defense-in-depth: secrets that flow through your shell never land on disk.
+
+One-time setup after `brew bundle`:
+
+```sh
+atuin import auto      # ingest existing ~/.zsh_history
+# Optional: enable sync
+# atuin register -u <username> -e <email>
+# atuin sync
+```
+
+## Prompt and runtime managers (starship, mise)
+
+**Starship** — `dot_config/starship.toml` defines a one-line Catppuccin Mocha
+prompt with directory (truncated to 3 levels), git branch + status, python
+(uv venv detection), rust, nodejs, and `cmd_duration` for any command longer
+than 2 s. `command_timeout = 1000` caps slow `git_status` calls so big
+monorepos don't hang the prompt. The palette matches Alacritty + Zellij so
+colors don't drift between the prompt and pane content.
+
+**Mise** — `dot_config/mise/config.toml` pins polyglot runtimes:
+
+```toml
+[tools]
+node = "lts"
+go = "latest"
+bun = "latest"
+deno = "latest"
+```
+
+Python is *deliberately not* under mise — it's owned by `uv` per-project
+(see `~/ai/playground/pyproject.toml`). Rust is owned by `rustup`. Mise
+covers the rest, so any project with a `mise.toml` or `.tool-versions`
+resolves automatically when you `cd` in.
 
 ## CLI replacements
 
