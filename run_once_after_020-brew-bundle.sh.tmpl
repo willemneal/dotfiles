@@ -2,6 +2,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-eval "$(/opt/homebrew/bin/brew shellenv)"
+{{ template "brew-shellenv.sh" . -}}
 brew bundle --file="$HOME/.Brewfile"
 {{ end -}}

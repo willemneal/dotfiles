@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+{{ template "brew-shellenv.sh" . -}}
 
 # uv: Brewfile is the primary path; fall back to the official installer.
 if ! command -v uv >/dev/null 2>&1; then
