@@ -78,7 +78,8 @@ On macOS, `chezmoi apply` runs four ordered `run_once_` scripts:
    (git, gh, jq, yq, fzf, direnv, zoxide, starship, neovim, tmux), Rust
    replacements (ripgrep, fd, bat, eza), Rust extras (git-delta, dust, tokei,
    hyperfine, bottom, gitui, just), terminal stack (alacritty, zellij), dev
-   (uv, mise, node), and productivity casks (raycast, rectangle, 1password).
+   (uv, mise, node), Rust toolchain (rustup, cargo-binstall), and
+   productivity casks (raycast, rectangle, 1password, tailscale-app).
    On hosts listed in `.chezmoidata.toml` `[hosts] ai_machines`, also
    `llama.cpp`, `ollama`, and the `lm-studio` cask.
 3. **`30-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,

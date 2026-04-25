@@ -38,6 +38,12 @@ brew "zellij"
 brew "uv"
 brew "mise"
 brew "node"
+
+# Rust toolchain — run `rustup default stable` once after install.
+# cargo-binstall is here for crates brew doesn't ship; brew remains the
+# default for the Rust CLIs above.
+brew "rustup"
+brew "cargo-binstall"
 {{ if has .chezmoi.hostname .hosts.ai_machines }}
 # AI (host-gated)
 brew "llama.cpp"
