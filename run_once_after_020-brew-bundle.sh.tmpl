@@ -4,4 +4,25 @@ set -euo pipefail
 
 {{ template "brew-shellenv.sh" . -}}
 brew bundle --file="$HOME/.Brewfile"
+
+# Strip Gatekeeper quarantine xattr from casks that often trip the
+# "Apple could not verify..." dialog on first launch. Missing apps are
+# silently skipped (a non-AI host doesn't get LM Studio installed).
+for app in \
+  /Applications/AeroSpace.app \
+  /Applications/Karabiner-Elements.app \
+  /Applications/Alacritty.app \
+  /Applications/Tailscale.app \
+  "/Applications/LM Studio.app"
+do
+  if [ -e "$app" ]; then
+    xattr -dr com.apple.quarantine "$app" 2>/dev/null || true
+  fi
+done
+
+# Surface permission prompts now (during bootstrap) rather than days
+# later. Karabiner first so its DriverKit driver is approved before
+# AeroSpace's bindings rely on the Hyper key.
+[ -d /Applications/Karabiner-Elements.app ] && open -a "Karabiner-Elements" || true
+[ -d /Applications/AeroSpace.app ] && open -a "AeroSpace" || true
 {{ end -}}
