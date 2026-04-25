@@ -102,7 +102,7 @@ mai-doctor                     # confirm everything came up
 ### Hugging Face token (gated models)
 
 `HF_TOKEN` is fetched lazily from 1Password — `hf-login` reads
-`op://Personal/HuggingFace/token` and exports it for the current shell.
+`op://Personal/HuggingFace/credential` and exports it for the current shell.
 Edit the `op://` reference in `dot_zshenv.tmpl` for a different vault
 layout. Skip if you only pull public models.
 
