@@ -18,5 +18,19 @@ hf-login() {
   export HF_TOKEN
 }
 
+# Bring tailscale up using a reusable auth key from 1Password.
+# Pass extra flags through, e.g. `tailscale-up --accept-routes`.
+tailscale-up() {
+  command -v tailscale >/dev/null || { print -u2 "tailscale not installed"; return 1; }
+  command -v op        >/dev/null || { print -u2 "op (1Password CLI) not installed"; return 1; }
+  if tailscale status >/dev/null 2>&1; then
+    print "tailscale already up"
+    return 0
+  fi
+  local key
+  key=$(op read "op://Personal/Tailscale/credential") || return $?
+  tailscale up --auth-key="$key" "$@"
+}
+
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
 {{ end -}}

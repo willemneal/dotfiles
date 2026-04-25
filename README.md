@@ -105,6 +105,13 @@ mai-doctor                     # confirm everything came up
 Edit the `op://` reference in `dot_zshenv.tmpl` for a different vault
 layout. Skip if you only pull public models.
 
+### Tailscale
+
+The `tailscale-app` cask installs the GUI + CLI. To bring a fresh Mac
+onto the tailnet without the browser flow, mint a reusable auth key
+once, store it in 1Password as `op://Personal/Tailscale/credential`,
+then run `tailscale-up` (defined in `dot_zshenv.tmpl`).
+
 ### First model
 
 ```sh
