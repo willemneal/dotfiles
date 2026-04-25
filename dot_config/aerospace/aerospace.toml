@@ -1,0 +1,103 @@
+# AeroSpace — i3-style tiling for macOS.
+# Docs: https://nikitabobko.github.io/AeroSpace/guide.html
+#
+# All bindings use Hyper (Cmd+Ctrl+Alt+Shift), produced by Karabiner from
+# Caps-Lock-on-hold. Hyper avoids every collision with Zellij/Alacritty/
+# native macOS shortcuts. Press Caps Lock alone for Esc.
+
+start-at-login = true
+after-login-command = []
+after-startup-command = []
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+
+accordion-padding = 30
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+
+[gaps]
+inner.horizontal = 8
+inner.vertical = 8
+outer.left = 8
+outer.right = 8
+outer.top = 8
+outer.bottom = 8
+
+# Apps that don't tile well — keep them floating.
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.finder'
+if.window-title-regex-substring = 'Copy|Move|Info|Get Info'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.raycast.macos'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.1password.1password'
+run = 'layout floating'
+
+[[on-window-detected]]
+if.app-id = 'com.apple.calculator'
+run = 'layout floating'
+
+# All bindings under Hyper (Cmd+Ctrl+Alt+Shift) via Karabiner.
+[mode.main.binding]
+# Workspaces: Hyper+1..6 to focus, Hyper+Shift+1..6 to send window.
+cmd-ctrl-alt-shift-1 = 'workspace 1'
+cmd-ctrl-alt-shift-2 = 'workspace 2'
+cmd-ctrl-alt-shift-3 = 'workspace 3'
+cmd-ctrl-alt-shift-4 = 'workspace 4'
+cmd-ctrl-alt-shift-5 = 'workspace 5'
+cmd-ctrl-alt-shift-6 = 'workspace 6'
+
+# (Move-to-workspace uses additional Shift modifier; Karabiner can't double-shift,
+# so use Hyper+Cmd+number via Karabiner remap. For now, use the service mode below.)
+
+# Focus (Hyper + h/j/k/l).
+cmd-ctrl-alt-shift-h = 'focus left'
+cmd-ctrl-alt-shift-j = 'focus down'
+cmd-ctrl-alt-shift-k = 'focus up'
+cmd-ctrl-alt-shift-l = 'focus right'
+
+# Resize.
+cmd-ctrl-alt-shift-minus = 'resize smart -50'
+cmd-ctrl-alt-shift-equal = 'resize smart +50'
+
+# Layout switching.
+cmd-ctrl-alt-shift-slash = 'layout tiles horizontal vertical'
+cmd-ctrl-alt-shift-comma = 'layout accordion horizontal vertical'
+
+# Toggle floating for the focused window.
+cmd-ctrl-alt-shift-f = 'layout floating tiling'
+
+# Reload config.
+cmd-ctrl-alt-shift-r = 'reload-config'
+
+# Drop into a service mode for less-frequent ops (move window, etc.)
+cmd-ctrl-alt-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+backspace = ['close-all-windows-but-current', 'mode main']
+
+# Move focused window to workspace 1..6 (within service mode).
+1 = ['move-node-to-workspace 1', 'mode main']
+2 = ['move-node-to-workspace 2', 'mode main']
+3 = ['move-node-to-workspace 3', 'mode main']
+4 = ['move-node-to-workspace 4', 'mode main']
+5 = ['move-node-to-workspace 5', 'mode main']
+6 = ['move-node-to-workspace 6', 'mode main']
+
+# Move window within current workspace.
+h = ['move left', 'mode main']
+j = ['move down', 'mode main']
+k = ['move up', 'mode main']
+l = ['move right', 'mode main']

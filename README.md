@@ -7,6 +7,7 @@ bootstrap — managed by [chezmoi](https://www.chezmoi.io).
 - [Layout](#layout)
 - [macOS AI bootstrap](#macos-ai-bootstrap)
 - [Zellij walkthrough](#zellij-walkthrough) — the long one
+- [Window management: AeroSpace + Karabiner](#window-management-aerospace--karabiner)
 - [Alacritty walkthrough](#alacritty-walkthrough)
 - [Shell, git, and 1Password integrations](#shell-git-and-1password-integrations)
 - [CLI replacements](#cli-replacements)
@@ -84,7 +85,8 @@ On macOS, `chezmoi apply` runs five ordered `run_once_` scripts:
    replacements (ripgrep, fd, bat, eza), Rust extras (git-delta, dust, tokei,
    hyperfine, bottom, gitui, just), terminal stack (alacritty, zellij), dev
    (uv, mise, node), Rust toolchain (rustup, cargo-binstall), and productivity
-   casks (raycast, rectangle, 1password, tailscale-app). On hosts in
+   casks (raycast, aerospace, karabiner-elements, 1password,
+   tailscale-app). On hosts in
    `.chezmoidata.toml` `[hosts] ai_machines`: also `llama.cpp`, `ollama`,
    `whisper-cpp`, `asitop`, and the `lm-studio` cask.
 3. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
@@ -316,6 +318,57 @@ The `dot_config/alacritty/profiles/` directory holds standalone Alacritty
 configs that SSH into a host and `zellij attach -c <session>`. Pick one with
 `Cmd+Shift+P` (macOS) — fzf picker over the directory, opens a new Alacritty
 window pinned `AlwaysOnTop`. See `profiles/README.md` for adding hosts.
+
+## Window management: AeroSpace + Karabiner
+
+The productivity stack ditches Rectangle for a tiling setup that's
+fully keyboard-driven and conflict-free with Zellij.
+
+### Karabiner-Elements: the Hyper key
+
+`dot_config/karabiner/karabiner.json` remaps **Caps Lock**:
+
+- **Tap and release** → `Esc` (cheap thrill for vim users).
+- **Hold and press another key** → Hyper, which is `Cmd+Ctrl+Opt+Shift`
+  pressed simultaneously. Nothing in macOS, Alacritty, or Zellij binds
+  to Hyper, so it's a clean modifier you can use without collisions.
+
+First time: open Karabiner-Elements, grant the input-monitoring
+permission macOS prompts for, and it'll pick up `~/.config/karabiner/`
+automatically.
+
+### AeroSpace: i3 for macOS
+
+`dot_config/aerospace/aerospace.toml` defines an i3-style tiling
+window manager. Every binding uses Hyper as the prefix.
+
+| Binding                        | Action                                      |
+|--------------------------------|---------------------------------------------|
+| `Hyper+1..6`                   | Focus workspace N                           |
+| `Hyper+h/j/k/l`                | Focus pane left / down / up / right         |
+| `Hyper+-` / `Hyper+=`          | Resize focused pane (smart, ±50)            |
+| `Hyper+/`                      | Toggle tiling layout (horizontal/vertical)  |
+| `Hyper+,`                      | Toggle accordion layout                     |
+| `Hyper+f`                      | Float the focused window                    |
+| `Hyper+r`                      | Reload AeroSpace config                     |
+| `Hyper+;`                      | Enter "service" mode (see below)            |
+
+Service mode (`Hyper+;` then…):
+
+| Key            | Action                                              |
+|----------------|-----------------------------------------------------|
+| `1..6`         | Move focused window to workspace N                  |
+| `h/j/k/l`      | Move focused window in direction                    |
+| `r`            | Flatten the workspace tree                          |
+| `Backspace`    | Close every window in the workspace except current  |
+| `Esc`          | Reload config and return to main mode               |
+
+Apps that don't tile well (System Preferences, 1Password, Raycast,
+Calculator) are declared `floating` in the config — add more as needed.
+
+AeroSpace runs fully in user-space (no SIP changes), so the only
+permission grant is "Accessibility access" on first launch. To start
+on login, the config sets `start-at-login = true`.
 
 ## Alacritty walkthrough
 
