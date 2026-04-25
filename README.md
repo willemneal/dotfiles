@@ -608,7 +608,7 @@ These aliases land via `dot_zshrc.tmpl`; the binaries come from the Brewfile.
 | Old      | New                  | Notes                                        |
 |----------|----------------------|----------------------------------------------|
 | `ls`     | `eza`                | `ll` adds `-lah --git`, `lt` is `--tree -L 2` |
-| `cat`    | `bat --paged=never`  | syntax-highlighted, page off                 |
+| `cat`    | `bat --paging=never` | syntax-highlighted, page off                 |
 | `find`   | `fd`                 | (no alias — different syntax)                |
 | `grep`   | `ripgrep` (`rg`)     | (no alias — different syntax)                |
 | `du`     | `dust`               | tree-shaped disk usage                       |
