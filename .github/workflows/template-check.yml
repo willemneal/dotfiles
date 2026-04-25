@@ -1,0 +1,29 @@
+name: template-check
+on: [push, pull_request]
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [darwin, linux]
+        hostname: [mai, other]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install chezmoi
+        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+      - name: Render every .tmpl
+        run: |
+          set -e
+          cat > /tmp/override.toml <<EOF
+          name = "Test"
+          email = "t@e"
+          [chezmoi]
+          os = "${{ matrix.os }}"
+          hostname = "${{ matrix.hostname }}"
+          EOF
+          for f in $(git ls-files '*.tmpl'); do
+            "$HOME/.local/bin/chezmoi" execute-template \
+              --source="$PWD" --override-data-file=/tmp/override.toml \
+              < "$f" > /dev/null
+          done
