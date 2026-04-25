@@ -1,0 +1,85 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Health check for the local AI dev environment.
+# Status only — never gates. Always exits 0.
+set -uo pipefail
+
+issues=0
+ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
+warn() { printf "  \033[33m!\033[0m %s\n" "$*"; issues=$((issues+1)); }
+miss() { printf "  \033[31m✗\033[0m %s\n" "$*"; issues=$((issues+1)); }
+section() { printf "\n\033[1m%s\033[0m\n" "$*"; }
+
+ver() {
+  local label="$1" cmd="$2"; shift 2
+  if command -v "$cmd" >/dev/null 2>&1; then
+    ok "$label: $("$cmd" "$@" 2>&1 | head -n1)"
+  else
+    miss "$label: not installed"
+  fi
+}
+
+PLAYGROUND="$HOME/ai/playground"
+MODELS="${MODELS_DIR:-$HOME/Models}"
+HF_CACHE="${HF_HOME:-$HOME/.cache/huggingface}"
+
+section "Versions"
+ver brew      brew      --version
+ver uv        uv        --version
+ver ollama    ollama    --version
+ver llama-cli llama-cli --version
+
+if [ -x "$PLAYGROUND/.venv/bin/python" ]; then
+  ok "playground python: $("$PLAYGROUND/.venv/bin/python" --version 2>&1)"
+  for pkg in mlx mlx-lm; do
+    if v=$(cd "$PLAYGROUND" && uv run pip show "$pkg" 2>/dev/null | awk '/^Version:/ {print $2}'); [ -n "${v:-}" ]; then
+      ok "$pkg: $v"
+    else
+      miss "$pkg: not installed in playground"
+    fi
+  done
+else
+  miss "playground venv missing — run \`chezmoi apply\` to bootstrap"
+fi
+
+section "Apps"
+if [ -d "/Applications/LM Studio.app" ]; then
+  ok "LM Studio: installed"
+else
+  miss "LM Studio: not installed (cask: lm-studio)"
+fi
+
+section "Disk"
+ok "$HOME free: $(df -h "$HOME" | awk 'NR==2 {print $4}')"
+if [ -d "$MODELS" ]; then
+  if command -v dust >/dev/null 2>&1; then
+    ok "Models ($MODELS): $(dust -d 0 -n 1 "$MODELS" 2>/dev/null | tail -n1 | awk '{print $1}')"
+  else
+    ok "Models ($MODELS): $(du -sh "$MODELS" 2>/dev/null | awk '{print $1}')"
+  fi
+fi
+[ -d "$HF_CACHE" ] && ok "HF cache ($HF_CACHE): $(du -sh "$HF_CACHE" 2>/dev/null | awk '{print $1}')"
+
+section "Memory"
+phys_bytes=$(sysctl -n hw.memsize)
+phys_mb=$((phys_bytes / 1024 / 1024))
+ok "physical: ${phys_mb} MiB"
+wired=$(sysctl -n iogpu.wired_limit_mb 2>/dev/null || echo 0)
+if [ "$wired" -eq 0 ]; then
+  warn "iogpu.wired_limit_mb: 0 (system default ~75% of physical); raise for 70B+ models"
+else
+  pct=$(( wired * 100 / phys_mb ))
+  if [ "$pct" -lt 95 ]; then
+    warn "iogpu.wired_limit_mb: ${wired} MiB (${pct}% of physical) — consider raising"
+  else
+    ok "iogpu.wired_limit_mb: ${wired} MiB (${pct}% of physical)"
+  fi
+fi
+
+if [ "$issues" -eq 0 ]; then
+  printf "\n\033[32mOK\033[0m\n"
+else
+  printf "\nIssues found: %d\n" "$issues"
+fi
+exit 0
+{{ end -}}
