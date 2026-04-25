@@ -1,0 +1,35 @@
+# Atuin — SQLite-backed shell history.
+# After install, run `atuin import auto` once to ingest existing ~/.zsh_history.
+# Sync is opt-in (atuin register / atuin login / atuin sync).
+
+update_check = false
+
+# UI
+style = "compact"
+inline_height = 25
+show_preview = true
+show_help = false
+enter_accept = true       # one Enter accepts; Tab edits
+keymap_mode = "emacs"
+search_mode = "fuzzy"
+filter_mode = "global"    # search across all sessions/dirs by default
+filter_mode_shell_up_key_binding = "session"  # Up arrow = session-only
+
+# Don't record commands matching these (regex). Defense-in-depth against
+# secrets ending up in the SQLite db: 1Password reads, the lazy login
+# helpers, anything with --token / --password / API_KEY in it.
+history_filter = [
+  "^op read",
+  "^op signin",
+  "^hf-login",
+  "^tailscale-up",
+  ".*--token=",
+  ".*--password=",
+  ".*api[_-]?key",
+  ".*HF_TOKEN=",
+  ".*TS_AUTHKEY=",
+]
+
+# Don't even *show* these in search if they somehow got recorded
+# (e.g. imported from old history before the filter existed).
+cwd_filter = []
