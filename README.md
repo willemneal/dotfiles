@@ -399,6 +399,24 @@ and routes diffs through delta side-by-side with `merge.conflictstyle=zdiff3`.
 Aliases: `git s` (status -sb), `co`, `br`, `ci`, and `lg` (graph + relative
 date).
 
+### Git commit signing via 1Password SSH (optional)
+
+If you set `signing_key` during `chezmoi init` (the SSH public-key
+fingerprint, e.g. `SHA256:abc...`), the gitconfig adds `commit.gpgsign=true`
+and points `gpg.ssh.program` at 1Password's `op-ssh-sign` helper. Every
+commit gets cryptographically signed by the 1Password-managed SSH key.
+
+One-time setup on a fresh machine:
+
+1. In 1Password → Settings → Developer: enable the SSH agent and
+   "Use SSH key for git commit signing".
+2. Add the matching public key to GitHub → Settings → SSH and GPG keys
+   → **New signing key** (separate from any auth key).
+3. Create `~/.ssh/allowed_signers` with one line:
+   `<your-email> ssh-ed25519 AAAA…` (so `git log --show-signature` works).
+4. Skip with a blank `signing_key` value during init if you don't want
+   this — gitconfig falls back to unsigned commits.
+
 ## CLI replacements
 
 These aliases land via `dot_zshrc.tmpl`; the binaries come from the Brewfile.
