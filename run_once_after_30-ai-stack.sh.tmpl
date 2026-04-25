@@ -1,0 +1,46 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || true
+
+# uv: Brewfile is the primary path; fall back to the official installer.
+if ! command -v uv >/dev/null 2>&1; then
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
+PLAYGROUND="$HOME/ai/playground"
+mkdir -p "$HOME/Models" "$HOME/.cache/huggingface" "$PLAYGROUND"
+
+if [ ! -f "$PLAYGROUND/pyproject.toml" ]; then
+  (
+    cd "$PLAYGROUND"
+    uv init --python 3.12 --no-readme --no-pin-python
+    uv add mlx mlx-lm huggingface-hub hf-transfer jupyter ipython rich
+    # Fine-tuning (uncomment when needed):
+    # uv add torch torchvision peft datasets accelerate transformers
+  )
+fi
+
+if [ ! -f "$PLAYGROUND/.envrc" ]; then
+  cat > "$PLAYGROUND/.envrc" <<'EOF'
+# Auto-activate the uv-managed venv on cd into this directory.
+[ -d .venv ] || uv sync
+source .venv/bin/activate
+EOF
+fi
+
+if command -v direnv >/dev/null 2>&1; then
+  direnv allow "$PLAYGROUND"
+fi
+
+cat <<EOF
+
+AI playground ready.
+  Playground:  $PLAYGROUND
+  Models dir:  $HOME/Models
+  HF cache:    $HOME/.cache/huggingface
+  Health check: run \`mai-doctor\`
+EOF
+{{ end -}}
