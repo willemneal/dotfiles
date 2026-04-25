@@ -1,0 +1,52 @@
+{{- if eq .chezmoi.os "darwin" -}}
+# To pin a fast-moving package, replace `brew "uv"` with `brew "uv@<version>"`
+# once a tap exists, or vendor via `brew extract`. Pin only on regression —
+# default is unpinned.
+
+# CLI essentials
+brew "git"
+brew "gh"
+brew "jq"
+brew "yq"
+brew "fzf"
+brew "direnv"
+brew "zoxide"
+brew "starship"
+brew "neovim"
+brew "tmux"
+
+# Rust-written CLI replacements
+brew "ripgrep"
+brew "fd"
+brew "bat"
+brew "eza"
+
+# Rust CLI extras
+brew "git-delta"
+brew "dust"
+brew "tokei"
+brew "hyperfine"
+brew "bottom"
+brew "gitui"
+brew "just"
+
+# Terminal stack
+cask "alacritty"
+brew "zellij"
+
+# Dev
+brew "uv"
+brew "mise"
+brew "node"
+{{ if has .chezmoi.hostname .hosts.ai_machines }}
+# AI (host-gated)
+brew "llama.cpp"
+brew "ollama"
+cask "lm-studio"
+{{ end }}
+# Productivity
+cask "raycast"
+cask "rectangle"
+cask "1password"
+cask "1password-cli"
+{{ end -}}

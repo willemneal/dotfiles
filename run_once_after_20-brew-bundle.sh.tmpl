@@ -1,0 +1,7 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+eval "$(/opt/homebrew/bin/brew shellenv)"
+brew bundle --file="$HOME/.Brewfile"
+{{ end -}}

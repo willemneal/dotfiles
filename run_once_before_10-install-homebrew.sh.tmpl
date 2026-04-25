@@ -1,0 +1,12 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Install Homebrew non-interactively if it's not already on PATH.
+# On a truly fresh Mac the installer triggers the Xcode Command Line Tools
+# GUI prompt — that's expected, not a failure. Re-run after CLT finishes.
+set -euo pipefail
+
+if ! command -v brew >/dev/null 2>&1 && ! [ -x /opt/homebrew/bin/brew ]; then
+  NONINTERACTIVE=1 /bin/bash -c \
+    "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+{{ end -}}
