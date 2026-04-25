@@ -49,6 +49,27 @@ else
   miss "LM Studio: not installed (cask: lm-studio)"
 fi
 
+section "Services"
+if command -v ollama >/dev/null 2>&1; then
+  if ollama list >/dev/null 2>&1; then
+    ok "ollama daemon: reachable ($(ollama list 2>/dev/null | tail -n +2 | wc -l | tr -d ' ') models)"
+  else
+    warn "ollama daemon: not running (\`ollama serve\` or open the app)"
+  fi
+fi
+if [ -x "$PLAYGROUND/.venv/bin/huggingface-cli" ]; then
+  if user=$(cd "$PLAYGROUND" && uv run huggingface-cli whoami 2>/dev/null) && [ -n "$user" ]; then
+    ok "HF auth: $user"
+  else
+    warn "HF auth: not logged in (run \`hf-login\` or \`huggingface-cli login\`)"
+  fi
+fi
+if curl -sfI --max-time 3 https://huggingface.co >/dev/null 2>&1; then
+  ok "huggingface.co: reachable"
+else
+  warn "huggingface.co: unreachable (network/DNS/firewall)"
+fi
+
 section "Disk"
 ok "$HOME free: $(df -h "$HOME" | awk 'NR==2 {print $4}')"
 if [ -d "$MODELS" ]; then

@@ -4,6 +4,8 @@ import = ["~/.config/alacritty/common.toml"]
 {{ if eq .chezmoi.os "darwin" -}}
 [window]
 decorations = "buttonless"
+# If macOS keyboard layouts ever start treating every keypress as Alt,
+# switch to "OnlyLeft" — see alacritty/alacritty#7077.
 option_as_alt = "Both"
 
 [[keyboard.bindings]]

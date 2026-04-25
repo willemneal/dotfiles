@@ -29,7 +29,7 @@ tailscale-up() {
   fi
   local key
   key=$(op read "op://Personal/Tailscale/credential") || return $?
-  tailscale up --auth-key="$key" "$@"
+  TS_AUTHKEY="$key" tailscale up "$@"
 }
 
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
