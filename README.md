@@ -19,24 +19,36 @@ bootstrap — managed by [chezmoi](https://www.chezmoi.io).
 ## Install
 
 ```sh
-# 1. Install chezmoi
+# 1. (AI hosts only) Set hostname *first* — chezmoi reads `.chezmoi.hostname`
+#    and gates AI-only scripts on `.hosts.ai_machines = ["mai"]`. Skip on a
+#    non-AI Mac; the AI bits will simply not fire.
+sudo scutil --set HostName mai
+sudo scutil --set LocalHostName mai
+sudo scutil --set ComputerName mai
+
+# 2. Install chezmoi
 sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin
 
-# 2. Initialise (prompts for name + email once)
+# 3. Initialise (prompts for name, email, and signing_key once)
 chezmoi init willemneal
 
-# 3. Preview what will land — *always* read this on a fresh machine
+# 4. Preview what will land — *always* read this on a fresh machine
 chezmoi diff
 
-# 4. Apply
+# 5. Apply
 chezmoi apply -v
 
-# 5. Confirm everything came up
+# 6. Confirm everything came up
 mai-doctor
 ```
 
 Re-running `chezmoi apply` is idempotent. The `run_once_*` scripts only re-fire
 when their content hash changes.
+
+**Forgot to set the hostname before applying?** Harmless — the AI-gated
+scripts render to empty and chezmoi doesn't run them. Fix the hostname,
+then `chezmoi apply -v` again; the scripts now render with content and
+fire on the next pass.
 
 ## Layout
 
