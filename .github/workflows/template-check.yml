@@ -15,7 +15,7 @@ jobs:
       - name: Render and shellcheck every .tmpl
         run: |
           set -e
-          printf 'name="T"\nemail="t@e"\n[chezmoi]\nos="${{ matrix.os }}"\nhostname="${{ matrix.hostname }}"\n' > /tmp/o.toml
+          printf 'name="T"\nemail="t@e"\nsigning_key=""\n[chezmoi]\nos="${{ matrix.os }}"\nhostname="${{ matrix.hostname }}"\n' > /tmp/o.toml
           CM="$HOME/.local/bin/chezmoi"
           for f in $(git ls-files '*.tmpl' | grep -v '^\.chezmoi\.toml\.tmpl$'); do
             "$CM" execute-template --source="$PWD" --override-data-file=/tmp/o.toml < "$f" > /tmp/rendered
