@@ -3,6 +3,9 @@
 # once a tap exists, or vendor via `brew extract`. Pin only on regression —
 # default is unpinned.
 
+# Third-party taps
+tap "nikitabobko/tap"   # aerospace
+
 # CLI essentials
 brew "git"
 brew "gh"
@@ -61,7 +64,7 @@ cask "lm-studio"
 {{ end }}
 # Productivity
 cask "raycast"
-cask "aerospace"           # i3-style tiling (replaces rectangle)
+cask "nikitabobko/tap/aerospace"  # i3-style tiling (replaces rectangle)
 cask "karabiner-elements"  # Caps Lock → Esc on tap / Hyper on hold
 cask "1password"
 cask "1password-cli"
