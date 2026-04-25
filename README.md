@@ -563,16 +563,18 @@ One-time setup on a fresh machine:
 ## Shell history (Atuin)
 
 Atuin replaces zsh's text-file `~/.zsh_history` with a SQLite store, plus a
-fuzzy-search UI. Wired into `dot_zshrc.tmpl` via:
+fuzzy-search UI on demand. Wired into `dot_zshrc.tmpl` via:
 
 ```sh
-command -v atuin >/dev/null && eval "$(atuin init zsh --disable-up-arrow)"
+command -v atuin >/dev/null && eval "$(atuin init zsh --disable-up-arrow --disable-ctrl-r)"
 ```
 
 `--disable-up-arrow` keeps Up arrow as zsh's native per-session sequential
-recall. Atuin owns **`Ctrl+R`**, which pops a fuzzy search across all your
-history (cross-session, cross-directory, optionally cross-machine if you
-opt into sync via `atuin register`).
+recall, and `--disable-ctrl-r` keeps Ctrl+R as zsh's built-in inline
+backward-search. Both standard zsh history bindings stay untouched —
+Atuin records to its SQLite store in the background but doesn't take
+over either keybind. To open Atuin's fuzzy UI explicitly, run `atuin
+search` (or bind it to a key of your choice in a `~/.zshrc.local`).
 
 `dot_config/atuin/config.toml` configures the UI (compact, single-Enter
 accept, no help line) and a `history_filter` regex list that drops these
