@@ -517,6 +517,23 @@ fzf (order matters), the CLI replacement aliases, and AI shortcuts (`hfd`,
 4. Run `tailscale-up` (extra flags forward, e.g. `--accept-routes`).
 ```
 
+### GitHub CLI (`gh`)
+
+`gh-login` exports `GH_TOKEN` from 1Password — `gh` reads that env var
+automatically, so there's no `gh auth login` step.
+
+```
+1. Mint a Personal Access Token at
+   https://github.com/settings/tokens?type=beta (Fine-grained, scoped to
+   the repos and permissions you actually need).
+2. Store in 1Password:
+     New item → API Credential
+     Vault: Personal
+     Title: GitHub CLI
+     credential: github_pat_…
+3. Run `gh-login` once per shell, then `gh repo view`, `gh pr list`, etc.
+```
+
 ### Git + delta
 
 `dot_gitconfig.tmpl` injects `name`/`email` from the chezmoi prompt cache,
