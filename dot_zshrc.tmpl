@@ -14,6 +14,12 @@ command -v mise     >/dev/null && eval "$(mise activate zsh)"
 [ -f /opt/homebrew/opt/fzf/shell/key-bindings.zsh ] && . /opt/homebrew/opt/fzf/shell/key-bindings.zsh
 [ -f /opt/homebrew/opt/fzf/shell/completion.zsh   ] && . /opt/homebrew/opt/fzf/shell/completion.zsh
 
+# Source order matters: autosuggestions before syntax-highlighting.
+[ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ] && \
+  . /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+[ -f /opt/homebrew/share/zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh ] && \
+  . /opt/homebrew/share/zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh
+
 alias ls='eza'
 alias ll='eza -lah --git'
 alias lt='eza --tree --level=2'

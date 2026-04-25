@@ -14,6 +14,11 @@ brew "zoxide"
 brew "starship"
 brew "neovim"
 brew "tmux"
+brew "repomix"  # bundle a repo into a single AI-friendly file (Claude Code companion)
+
+# Zsh enhancements
+brew "zsh-autosuggestions"
+brew "zsh-fast-syntax-highlighting"
 
 # Rust-written CLI replacements
 brew "ripgrep"
@@ -50,6 +55,7 @@ brew "llama.cpp"
 brew "ollama"
 brew "whisper-cpp" # local speech-to-text; pairs with mlx for audio→LLM pipelines
 brew "asitop"      # Apple Silicon GPU/memory monitor — leaner than btm for inference work
+brew "mactop"      # Per-core CPU/GPU + thermal sensors; complements asitop
 cask "lm-studio"
 {{ end }}
 # Productivity

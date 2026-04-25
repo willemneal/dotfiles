@@ -1,0 +1,8 @@
+# Polyglot runtime baseline. Python is owned by uv (per-project, in
+# `~/ai/playground/pyproject.toml`); Rust is owned by rustup. Mise covers
+# the rest so a fresh repo with `mise.toml` resolves automatically.
+[tools]
+node = "lts"
+go = "latest"
+bun = "latest"
+deno = "latest"
