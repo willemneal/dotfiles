@@ -1,0 +1,31 @@
+{{- if eq .chezmoi.os "darwin" -}}
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=50000
+SAVEHIST=50000
+setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY INC_APPEND_HISTORY
+
+autoload -Uz compinit && compinit
+
+command -v starship >/dev/null && eval "$(starship init zsh)"
+command -v zoxide   >/dev/null && eval "$(zoxide init zsh)"
+command -v direnv   >/dev/null && eval "$(direnv hook zsh)"
+command -v mise     >/dev/null && eval "$(mise activate zsh)"
+
+[ -f /opt/homebrew/opt/fzf/shell/key-bindings.zsh ] && . /opt/homebrew/opt/fzf/shell/key-bindings.zsh
+[ -f /opt/homebrew/opt/fzf/shell/completion.zsh   ] && . /opt/homebrew/opt/fzf/shell/completion.zsh
+
+alias ls='eza'
+alias ll='eza -lah --git'
+alias lt='eza --tree --level=2'
+alias cat='bat --paged=never'
+alias vim='nvim'
+alias g='git'
+alias du='dust'
+alias top='btm'
+
+alias hfd='huggingface-cli download'
+alias play='cd $HOME/ai/playground && uv run python'
+alias jlab='cd $HOME/ai/playground && uv run jupyter lab'
+
+[ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"
+{{ end -}}

@@ -1,0 +1,39 @@
+{{- if eq .chezmoi.os "darwin" -}}
+[user]
+  name = {{ .name | quote }}
+  email = {{ .email | quote }}
+
+[init]
+  defaultBranch = main
+
+[pull]
+  rebase = true
+
+[push]
+  autoSetupRemote = true
+
+[core]
+  editor = nvim
+  pager = delta
+
+[diff]
+  colorMoved = default
+
+[interactive]
+  diffFilter = delta --color-only
+
+[delta]
+  navigate = true
+  light = false
+  side-by-side = true
+
+[merge]
+  conflictstyle = zdiff3
+
+[alias]
+  s = status -sb
+  co = checkout
+  br = branch
+  ci = commit
+  lg = log --graph --abbrev-commit --pretty=format:'%C(auto)%h%d %s %C(dim)(%cr) <%an>'
+{{ end -}}

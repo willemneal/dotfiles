@@ -1,0 +1,14 @@
+{{- if eq .chezmoi.os "darwin" -}}
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+export EDITOR=nvim
+export VISUAL="$EDITOR"
+
+export HF_HUB_ENABLE_HF_TRANSFER=1
+export MODELS_DIR="$HOME/Models"
+# export HF_HOME="/Volumes/External/hf"
+
+[ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
+{{ end -}}
