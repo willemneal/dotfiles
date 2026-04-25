@@ -1,0 +1,26 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Enable Touch ID for sudo via /etc/pam.d/sudo_local. This file is
+# ignored by macOS during system updates (unlike /etc/pam.d/sudo, which
+# gets reset and would silently disable Touch ID after each update).
+# Sequoia ships a /etc/pam.d/sudo_local.template with the right line
+# commented out — prefer that path; fall back to a fresh write.
+set -euo pipefail
+
+PAM=/etc/pam.d/sudo_local
+
+if [ -f "$PAM" ] && grep -qE '^auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so' "$PAM"; then
+  echo "sudo Touch ID already enabled"
+  exit 0
+fi
+
+if [ -f /etc/pam.d/sudo_local.template ]; then
+  sudo cp /etc/pam.d/sudo_local.template "$PAM"
+  sudo sed -i '' -E 's|^#?(auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so)|\1|' "$PAM"
+else
+  echo 'auth       sufficient     pam_tid.so' | sudo tee -a "$PAM" >/dev/null
+  sudo chmod 644 "$PAM"
+fi
+
+echo "sudo Touch ID enabled (edit /etc/pam.d/sudo_local to revert)"
+{{ end -}}

@@ -1,0 +1,24 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# Exclude large, re-downloadable AI artifacts from Time Machine. Without
+# this, Time Machine snapshots balloon and restores take forever — model
+# weights live on huggingface.co, the venv lives in pyproject.toml, and
+# both can be rebuilt with one `chezmoi apply` after a restore.
+set -euo pipefail
+
+paths=(
+  "$HOME/Models"
+  "$HOME/.cache/huggingface"
+  "$HOME/.cache/uv"
+  "$HOME/ai/playground/.venv"
+)
+
+for p in "${paths[@]}"; do
+  mkdir -p "$p"
+  if tmutil isexcluded "$p" 2>/dev/null | grep -q '\[Excluded\]'; then
+    continue
+  fi
+  tmutil addexclusion "$p"
+  echo "Time Machine: excluded $p"
+done
+{{ end -}}
