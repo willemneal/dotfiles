@@ -2,3 +2,6 @@ README.md
 {{ if ne .chezmoi.os "linux" -}}
 .config/zellij/layouts/minimal.kdl
 {{- end }}
+{{ if and (eq .chezmoi.os "darwin") (not (has .chezmoi.hostname .hosts.ai_machines)) -}}
+.local/bin/mai-doctor
+{{- end }}

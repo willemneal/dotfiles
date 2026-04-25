@@ -10,20 +10,13 @@ jobs:
         hostname: [mai, other]
     steps:
       - uses: actions/checkout@v4
-      - name: Install chezmoi
-        run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
+      - run: sh -c "$(curl -fsLS get.chezmoi.io)" -- -b "$HOME/.local/bin"
       - name: Render every .tmpl
         run: |
           set -e
-          cat > /tmp/override.toml <<EOF
-          name = "Test"
-          email = "t@e"
-          [chezmoi]
-          os = "${{ matrix.os }}"
-          hostname = "${{ matrix.hostname }}"
-          EOF
-          for f in $(git ls-files '*.tmpl'); do
-            "$HOME/.local/bin/chezmoi" execute-template \
-              --source="$PWD" --override-data-file=/tmp/override.toml \
-              < "$f" > /dev/null
+          printf 'name="T"\nemail="t@e"\n[chezmoi]\nos="${{ matrix.os }}"\nhostname="${{ matrix.hostname }}"\n' > /tmp/o.toml
+          CM="$HOME/.local/bin/chezmoi"
+          for f in $(git ls-files '*.tmpl' | grep -v '^\.chezmoi\.toml\.tmpl$'); do
+            "$CM" execute-template --source="$PWD" --override-data-file=/tmp/o.toml < "$f" >/dev/null
           done
+          "$CM" execute-template --init --source="$PWD" -p name=T -p email=t@e < .chezmoi.toml.tmpl >/dev/null
