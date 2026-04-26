@@ -31,8 +31,10 @@ ver llama-cli llama-cli --version
 
 if [ -x "$PLAYGROUND/.venv/bin/python" ]; then
   ok "playground python: $("$PLAYGROUND/.venv/bin/python" --version 2>&1)"
-  for pkg in mlx mlx-lm; do
-    if v=$(cd "$PLAYGROUND" && uv run pip show "$pkg" 2>/dev/null | awk '/^Version:/ {print $2}'); [ -n "${v:-}" ]; then
+  # Use `uv pip show` (uv's built-in resolver) — uv-managed venvs don't
+  # include `pip`, so `uv run pip show` would silently fail.
+  for pkg in mlx mlx-lm mlx-vlm; do
+    if v=$(cd "$PLAYGROUND" && uv pip show "$pkg" 2>/dev/null | awk '/^Version:/ {print $2}'); [ -n "${v:-}" ]; then
       ok "$pkg: $v"
     else
       miss "$pkg: not installed in playground"
