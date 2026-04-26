@@ -4,10 +4,12 @@
 
 update_check = false
 
-# UI
+# UI — render inline below the current prompt instead of taking over the
+# screen. invert + small inline_height keeps the layout where you typed.
 style = "compact"
-inline_height = 25
-show_preview = true
+inline_height = 10
+invert = true             # results appear above the search box (next to prompt)
+show_preview = false      # less vertical space than preview pane
 show_help = false
 enter_accept = true       # one Enter accepts; Tab edits
 keymap_mode = "emacs"
