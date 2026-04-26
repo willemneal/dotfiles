@@ -97,6 +97,59 @@ else
   fi
 fi
 
+section "Bootstrap state"
+# 010-install-homebrew
+if command -v brew >/dev/null 2>&1; then
+  ok "Homebrew: installed ($(brew --prefix))"
+else
+  miss "Homebrew: not installed (run_once_before_010)"
+fi
+
+# 020-brew-bundle
+if [ -f "$HOME/.Brewfile" ]; then
+  ok "Brewfile: present ($(grep -cE '^(brew|cask|tap) "' "$HOME/.Brewfile") packages)"
+else
+  miss "\$HOME/.Brewfile: missing (run_once_after_020)"
+fi
+
+# 035-iogpu-limit (AI hosts only — only flag if missing on a host that should have it)
+PLIST=/Library/LaunchDaemons/local.iogpu.wired-limit.plist
+if [ -f "$PLIST" ]; then
+  ok "iogpu LaunchDaemon: $PLIST present"
+else
+  warn "iogpu LaunchDaemon: not installed (run_once_after_035; AI-host gated)"
+fi
+
+# 040-macos-defaults — sample one of the writes for evidence the script ran
+if [ "$(defaults read NSGlobalDomain AppleShowAllExtensions 2>/dev/null)" = "1" ]; then
+  ok "macOS defaults: applied (Finder shows all extensions)"
+else
+  warn "macOS defaults: not applied (run_once_after_040)"
+fi
+
+# 045-time-machine — check excludes for paths we created
+tm_excluded=0; tm_present=0
+for p in "$HOME/Models" "$HOME/.cache/huggingface" "$HOME/.cache/uv" "$HOME/ai/playground/.venv"; do
+  if [ -e "$p" ]; then
+    tm_present=$((tm_present+1))
+    tmutil isexcluded "$p" 2>/dev/null | grep -q '\[Excluded\]' && tm_excluded=$((tm_excluded+1))
+  fi
+done
+if [ "$tm_present" -gt 0 ]; then
+  if [ "$tm_excluded" = "$tm_present" ]; then
+    ok "Time Machine excludes: ${tm_excluded}/${tm_present}"
+  else
+    warn "Time Machine excludes: ${tm_excluded}/${tm_present} (run_once_after_045)"
+  fi
+fi
+
+# 050-sudo-touchid
+if grep -qE '^auth[[:space:]]+sufficient[[:space:]]+pam_tid\.so' /etc/pam.d/sudo_local 2>/dev/null; then
+  ok "sudo Touch ID: enabled"
+else
+  warn "sudo Touch ID: not configured (run_once_after_050)"
+fi
+
 if [ "$issues" -eq 0 ]; then
   printf "\n\033[32mOK\033[0m\n"
 else
