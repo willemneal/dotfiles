@@ -534,25 +534,33 @@ automatically, so there's no `gh auth login` step.
 3. Run `gh-login` once per shell, then `gh repo view`, `gh pr list`, etc.
 ```
 
-### AI provider keys
+### OpenRouter
 
-`ai-keys-login` exports `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, and
-`GOOGLE_GENERATIVE_AI_API_KEY` from 1Password in one shot. Each lookup
-is independent — a missing item logs and skips, doesn't fail the
-others. Each provider gets its own item so rotation is per-provider.
+`openrouter-login` exports `OPENROUTER_API_KEY` from 1Password.
+OpenRouter is an OpenAI-compatible gateway to every major model
+(Claude, GPT, Gemini, Groq-hosted Llama, etc.) — one key replaces
+managing per-provider keys, and rotation is one console click.
 
 ```
-1. For each provider, mint a key in their console:
-     - Anthropic:  https://console.anthropic.com/settings/keys
-     - Groq:       https://console.groq.com/keys
-     - Gemini:     https://aistudio.google.com/apikey
-2. Store each in 1Password:
+1. Mint a key at https://openrouter.ai/settings/keys
+2. Store in 1Password:
      New item → API Credential
      Vault: Personal
-     Title: Anthropic API   (or "Groq API" / "Google Gemini API")
-     credential: <the key>
-3. Run `ai-keys-login`. Output reports which providers loaded.
+     Title: OpenRouter
+     credential: sk-or-v1-…
+3. Run `openrouter-login`.
 ```
+
+Tools that don't read `OPENROUTER_API_KEY` natively will accept
+OpenAI-compatible config:
+
+```sh
+export OPENAI_API_KEY="$OPENROUTER_API_KEY"
+export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+```
+
+Add the two lines above to `~/.zshenv.local` if you want every
+OpenAI-SDK tool routed through OpenRouter automatically.
 
 ### Git + delta
 

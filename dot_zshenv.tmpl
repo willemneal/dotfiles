@@ -40,23 +40,13 @@ gh-login() {
   export GH_TOKEN
 }
 
-# Load AI provider keys from 1Password in one shot. Each lookup is
-# independent — a missing item logs and skips, doesn't fail the others.
-# Storing all three under separate API Credential items keeps rotation
-# per-provider.
-ai-keys-login() {
+# Load OpenRouter API key from 1Password. OpenRouter is an
+# OpenAI-compatible gateway to every major model (Claude, GPT, Gemini,
+# Groq-hosted Llama, etc.) — one key replaces per-provider keys.
+openrouter-login() {
   command -v op >/dev/null || { print -u2 "op (1Password CLI) not installed"; return 1; }
-  local loaded=()
-  if v=$(op read "op://Personal/Anthropic API/credential" 2>/dev/null); then
-    export ANTHROPIC_API_KEY="$v" && loaded+=(anthropic)
-  fi
-  if v=$(op read "op://Personal/Groq API/credential" 2>/dev/null); then
-    export GROQ_API_KEY="$v" && loaded+=(groq)
-  fi
-  if v=$(op read "op://Personal/Google Gemini API/credential" 2>/dev/null); then
-    export GOOGLE_GENERATIVE_AI_API_KEY="$v" && loaded+=(gemini)
-  fi
-  print "Loaded AI keys: ${loaded[*]:-(none — check op:// paths)}"
+  OPENROUTER_API_KEY=$(op read "op://Personal/OpenRouter/credential") || return $?
+  export OPENROUTER_API_KEY
 }
 
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
