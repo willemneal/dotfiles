@@ -34,5 +34,9 @@ alias hfd='huggingface-cli download'
 alias play='cd $HOME/ai/playground && uv run python'
 alias jlab='cd $HOME/ai/playground && uv run jupyter lab'
 
+# cargo-binstall shorthand (cargo-binstall is in the Brewfile).
+alias cbi='cargo binstall'
+alias cbif='cargo binstall --force -y'
+
 [ -f "$HOME/.zshrc.local" ] && . "$HOME/.zshrc.local"
 {{ end -}}

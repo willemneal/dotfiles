@@ -534,6 +534,26 @@ automatically, so there's no `gh auth login` step.
 3. Run `gh-login` once per shell, then `gh repo view`, `gh pr list`, etc.
 ```
 
+### AI provider keys
+
+`ai-keys-login` exports `ANTHROPIC_API_KEY`, `GROQ_API_KEY`, and
+`GOOGLE_GENERATIVE_AI_API_KEY` from 1Password in one shot. Each lookup
+is independent — a missing item logs and skips, doesn't fail the
+others. Each provider gets its own item so rotation is per-provider.
+
+```
+1. For each provider, mint a key in their console:
+     - Anthropic:  https://console.anthropic.com/settings/keys
+     - Groq:       https://console.groq.com/keys
+     - Gemini:     https://aistudio.google.com/apikey
+2. Store each in 1Password:
+     New item → API Credential
+     Vault: Personal
+     Title: Anthropic API   (or "Groq API" / "Google Gemini API")
+     credential: <the key>
+3. Run `ai-keys-login`. Output reports which providers loaded.
+```
+
 ### Git + delta
 
 `dot_gitconfig.tmpl` injects `name`/`email` from the chezmoi prompt cache,
