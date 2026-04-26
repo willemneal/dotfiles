@@ -49,5 +49,46 @@ openrouter-login() {
   export OPENROUTER_API_KEY
 }
 
+# Create an API Credential item in the Personal vault without exposing
+# the secret in argv or shell history. The secret reaches op via stdin
+# (kernel pipe — private to jq/op), never as a CLI flag.
+op-cred() {
+  command -v op >/dev/null || { print -u2 "op not installed"; return 1; }
+  command -v jq >/dev/null || { print -u2 "jq not installed"; return 1; }
+  [ $# -eq 1 ] || { print -u2 "usage: op-cred <item-title>"; return 2; }
+  printf "Paste credential for %s (input hidden): " "$1" >&2
+  IFS= read -rs; print
+  [ -z "$REPLY" ] && { print -u2 "(empty — aborting)"; return 1; }
+  print -nr -- "$REPLY" | jq -Rn --arg t "$1" '{
+    title: $t,
+    category: "API_CREDENTIAL",
+    vault: { name: "Personal" },
+    fields: [ { id: "credential", type: "CONCEALED", value: input } ]
+  }' | op item create --template - >/dev/null \
+    && print "✓ $1 created" || print -u2 "✗ $1 failed"
+  unset REPLY
+}
+
+# Idempotent bootstrap of the credentials the dotfiles' *-login
+# functions expect. Skips items that already exist; press Enter to
+# skip an item you don't have yet.
+op-creds-bootstrap() {
+  command -v op >/dev/null || { print -u2 "op not installed"; return 1; }
+  local needed=(
+    "OpenRouter"
+    "OpenRouter Provisioning"
+    "GitHub CLI"
+    "HuggingFace"
+    "Tailscale"
+  )
+  for title in $needed; do
+    if op item get "$title" --vault Personal >/dev/null 2>&1; then
+      print "✓ $title (already exists)"
+    else
+      op-cred "$title" || true
+    fi
+  done
+}
+
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"
 {{ end -}}
