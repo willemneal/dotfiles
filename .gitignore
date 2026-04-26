@@ -1,0 +1,3 @@
+# Claude Code session state — runtime-only, per-machine.
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
