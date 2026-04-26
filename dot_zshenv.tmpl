@@ -69,25 +69,23 @@ op-cred() {
   unset REPLY
 }
 
-# Idempotent bootstrap of the credentials the dotfiles' *-login
-# functions expect. Skips items that already exist; press Enter to
-# skip an item you don't have yet.
+# Idempotent bootstrap of credentials the dotfiles' *-login functions
+# expect. Reads the canonical inventory from ~/.config/op-creds (one
+# item title per line, # comments allowed). Adding a credential is a
+# config edit, not a function edit. Override the path with $OP_CREDS_FILE.
 op-creds-bootstrap() {
   command -v op >/dev/null || { print -u2 "op not installed"; return 1; }
-  local needed=(
-    "OpenRouter"
-    "OpenRouter Provisioning"
-    "GitHub CLI"
-    "HuggingFace"
-    "Tailscale"
-  )
-  for title in $needed; do
+  local cfg="${OP_CREDS_FILE:-$HOME/.config/op-creds}"
+  [ -r "$cfg" ] || { print -u2 "op-creds config not found at $cfg"; return 1; }
+  local title
+  while IFS= read -r title; do
+    [[ -z "$title" || "$title" == \#* ]] && continue
     if op item get "$title" --vault Personal >/dev/null 2>&1; then
       print "✓ $title (already exists)"
     else
       op-cred "$title" || true
     fi
-  done
+  done < "$cfg"
 }
 
 [ -f "$HOME/.zshenv.local" ] && . "$HOME/.zshenv.local"

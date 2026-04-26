@@ -1,0 +1,11 @@
+# Credentials the dotfiles' *-login functions read from 1Password.
+# One item title per line. Comments (#) and blank lines are ignored.
+# Add an entry here, re-apply chezmoi if you want it tracked, then run
+# `op-creds-bootstrap` — the new title gets prompted; existing items
+# are skipped.
+
+OpenRouter
+OpenRouter Provisioning
+GitHub CLI
+HuggingFace
+Tailscale
