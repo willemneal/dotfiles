@@ -75,4 +75,12 @@ cask "tailscale-app"
 cask "claude"              # Anthropic desktop app — companion to Claude Code
 cask "obsidian"            # local-first markdown PKM; vault is plain files
 cask "appcleaner"          # clean uninstall — drag app, removes prefs/caches
+
+# Containers
+# macOS 26+ ships native OCI container support via /usr/bin/container
+# (Apple's Containerization framework). For occasional `container run`
+# that's enough — no install needed. Uncomment the cask below if you
+# need any of: docker-compose, multi-arch (Rosetta-translated x86
+# images), Kubernetes, drop-in `docker` CLI compatibility, or a GUI.
+# cask "orbstack"
 {{ end -}}
