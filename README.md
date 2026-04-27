@@ -18,6 +18,18 @@ bootstrap — managed by [chezmoi](https://www.chezmoi.io).
 
 ## Install
 
+**Fresh-Mac one-shot:** `bootstrap.sh` at the repo root sets the hostname
+to `mai`, installs chezmoi, runs `chezmoi init willemneal` (interactive
+prompts for name/email/signing_key), and applies. Copy or clone the
+repo onto the new Mac, then:
+
+```sh
+./bootstrap.sh        # interactive, against the real github.com/willemneal/dotfiles
+./bootstrap.sh --test # uses a VirtioFS-mounted source (for VM smoke testing)
+```
+
+**Manual steps (equivalent):**
+
 ```sh
 # 1. (AI hosts only) Set hostname *first* — chezmoi reads `.chezmoi.hostname`
 #    and gates AI-only scripts on `.hosts.ai_machines = ["mai"]`. Skip on a
@@ -54,6 +66,7 @@ fire on the next pass.
 
 ```
 .
+├── bootstrap.sh                                fresh-Mac one-shot (hostname + chezmoi init + apply)
 ├── .chezmoi.toml.tmpl                          one-time prompts (name, email)
 ├── .chezmoidata.toml                           shared data (ai_machines list)
 ├── .chezmoiignore.tmpl                         excludes by OS / host
@@ -75,6 +88,7 @@ fire on the next pass.
 │   ├── karabiner/karabiner.json                Caps Lock → Esc/Hyper remap
 │   ├── mise/config.toml                        global runtime versions (node/go/bun/deno)
 │   ├── nvim/                                   LazyVim bootstrap (init.lua + lua/)
+│   ├── op-creds                                inventory for op-creds-bootstrap (one item per line)
 │   ├── starship.toml                           Catppuccin Mocha prompt
 │   └── zellij/
 │       ├── config.kdl.tmpl                     picks macos or linux body
@@ -105,18 +119,34 @@ On macOS, `chezmoi apply` runs seven ordered `run_once_` scripts:
    Tools GUI prompt; that's expected — let it finish, then re-run.
 2. **`020-brew-bundle`** — installs everything in `~/.Brewfile`:
    - CLI essentials: git, gh, jq, yq, fzf, direnv, zoxide, starship, neovim,
-     tmux, **repomix**.
+     tmux, repomix, mas (Mac App Store CLI).
    - Rust replacements: ripgrep, fd, bat, eza.
    - Rust extras: git-delta, dust, tokei, hyperfine, bottom, gitui, just.
-   - Zsh enhancements: **zsh-autosuggestions**, **zsh-fast-syntax-highlighting**,
-     **atuin**.
-   - Terminal stack: alacritty, zellij.
+   - Zsh enhancements: zsh-autosuggestions, zsh-fast-syntax-highlighting, atuin.
+   - Terminal stack: alacritty, ghostty (Metal-native), zellij.
+   - Editor: zed.
    - Dev: uv, mise, node.
    - Rust toolchain: rustup, cargo-binstall.
-   - Productivity casks: raycast, **aerospace**, **karabiner-elements**,
-     1password, 1password-cli, tailscale-app.
+   - Productivity: raycast, aerospace, karabiner-elements, 1password,
+     1password-cli, tailscale-app, claude (Anthropic desktop), obsidian,
+     appcleaner.
+   - Communication: slack, discord, zoom, signal, telegram.
+   - Media: vlc, iina, obs, handbrake, audacity.
+   - Creative / GPU: blender, godot, epic-games (Epic launcher → Unreal),
+     draw-things (local Stable Diffusion / Flux on MLX), upscayl
+     (Real-ESRGAN image upscaler).
+   - Games / Windows compat: steam, nvidia-geforce-now, crossover.
+   - Security / wallets: yubico-authenticator, ledger-live, protonvpn.
+   - Mac App Store (via `mas`): Flighty. Requires the App Store to be
+     signed in *and* the app to have been "obtained" once on this Apple
+     ID — otherwise `mas install` errors out (brew bundle continues past
+     the failure). See the Brewfile for substitutes (Meeter via direct
+     download, MeetingBar/Dato via App Store).
+   - Containers: nothing by default — macOS 26+ ships a native `container`
+     CLI. The Brewfile has a commented `cask "orbstack"` to uncomment if
+     you need docker-compose, multi-arch, k8s, or a GUI.
    - On hosts in `.chezmoidata.toml` `[hosts] ai_machines`: also llama.cpp,
-     ollama, whisper-cpp, asitop, **mactop**, and the lm-studio cask.
+     ollama, whisper-cpp, asitop, mactop, and the lm-studio cask.
 3. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
    `~/.cache/huggingface`, `~/ai/playground`. `uv init`s the playground at
    Python 3.12 with `mlx`, `mlx-lm`, `mlx-vlm`, `huggingface-hub`,
@@ -474,12 +504,17 @@ nothing collides.
 - `EDITOR=nvim`, `VISUAL=$EDITOR`.
 - AI env: `HF_HUB_ENABLE_HF_TRANSFER=1`, `MODELS_DIR=$HOME/Models`.
   `HF_HOME` is commented out — uncomment to point at an external drive.
-- Two lazy 1Password helpers (only run on demand, never at shell startup):
-  - **`hf-login`** → exports `HF_TOKEN` from
-    `op://Personal/HuggingFace/credential`. Walkthrough below.
+- Lazy 1Password helpers (only run on demand, never at shell startup) —
+  see "Shell, git, and 1Password integrations" below for full walkthroughs:
+  - **`hf-login`** → exports `HF_TOKEN` from `op://Personal/HuggingFace/credential`.
   - **`tailscale-up`** → reads `op://Personal/Tailscale/credential` and runs
     `tailscale up` with the key passed via `TS_AUTHKEY` env (no `ps` leak).
     Forwards extra flags, e.g. `tailscale-up --accept-routes`.
+  - **`gh-login`** → exports `GH_TOKEN` from `op://Personal/GitHub CLI/credential`.
+  - **`openrouter-login`** → exports `OPENROUTER_API_KEY`.
+  - **`op-cred`** / **`op-creds-bootstrap`** → create / bootstrap credentials
+    in 1Password without leaking secrets via argv. Inventory at
+    `~/.config/op-creds`.
 - Sources `~/.zshenv.local` if present (machine-specific overrides, untracked).
 
 ### `dot_zshrc` (interactive shells)
@@ -561,6 +596,42 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 
 Add the two lines above to `~/.zshenv.local` if you want every
 OpenAI-SDK tool routed through OpenRouter automatically.
+
+### Bootstrap 1Password credentials
+
+Two zsh helpers in `dot_zshenv.tmpl` manage credential storage without
+ever exposing secrets in `argv` or shell history:
+
+- **`op-cred <title>`** — prompts for a credential (input hidden), pipes
+  the value into `op item create` via stdin (kernel pipe — never on the
+  command line, never in `ps`). Creates an `API_CREDENTIAL` item in the
+  Personal vault.
+- **`op-creds-bootstrap`** — idempotently bootstraps every credential the
+  dotfiles' `*-login` functions expect. Reads the inventory from
+  `~/.config/op-creds` (one item title per line, `#` comments allowed).
+  Adding a new credential is a one-line config edit, not a function
+  edit. Override the path with `OP_CREDS_FILE=...`.
+
+Workflow on a fresh machine:
+
+```sh
+eval "$(op signin)"      # authenticate the CLI session once
+op-creds-bootstrap       # iterates ~/.config/op-creds, prompts for missing items
+```
+
+The shipped inventory at `dot_config/op-creds`:
+
+```
+OpenRouter
+OpenRouter Provisioning
+GitHub CLI
+HuggingFace
+Tailscale
+```
+
+To add a new credential, append the item title to that file and re-run
+`op-creds-bootstrap` — existing items report `✓ already exists` and only
+the new one prompts.
 
 ### Git + delta
 

@@ -109,7 +109,7 @@ fi
 
 # 020-brew-bundle
 if [ -f "$HOME/.Brewfile" ]; then
-  ok "Brewfile: present ($(grep -cE '^(brew|cask|tap) "' "$HOME/.Brewfile") packages)"
+  ok "Brewfile: present ($(grep -cE '^(brew|cask|tap|mas) "' "$HOME/.Brewfile") packages)"
 else
   miss "\$HOME/.Brewfile: missing (run_once_after_020)"
 fi
