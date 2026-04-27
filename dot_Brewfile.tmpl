@@ -18,6 +18,7 @@ brew "starship"
 brew "neovim"
 brew "tmux"
 brew "repomix"  # bundle a repo into a single AI-friendly file (Claude Code companion)
+brew "mas"      # Mac App Store CLI — drives `mas` lines below
 
 # Zsh enhancements
 brew "zsh-autosuggestions"
@@ -40,11 +41,12 @@ brew "gitui"
 brew "just"
 
 # Terminal stack
-cask "alacritty"
+cask "alacritty"           # OpenGL terminal — primary; Cmd+Shift+P → SSH profile picker
+cask "ghostty"             # Metal-native terminal — compare against alacritty
 brew "zellij"
 
 # Editors
-cask "zed"
+cask "zed"                 # Metal-rendered code editor; quick alt to nvim for big files
 
 # Dev
 brew "uv"
@@ -63,18 +65,57 @@ brew "ollama"
 brew "whisper-cpp" # local speech-to-text; pairs with mlx for audio→LLM pipelines
 brew "asitop"      # Apple Silicon GPU/memory monitor — leaner than btm for inference work
 brew "mactop"      # Per-core CPU/GPU + thermal sensors; complements asitop
-cask "lm-studio"
+cask "lm-studio"           # GUI for local LLMs (gguf + MLX models)
 {{ end }}
 # Productivity
-cask "raycast"
+cask "raycast"             # Spotlight replacement — launcher, snippets, clipboard, extensions
 cask "nikitabobko/tap/aerospace"  # i3-style tiling (replaces rectangle)
 cask "karabiner-elements"  # Caps Lock → Esc on tap / Hyper on hold
-cask "1password"
-cask "1password-cli"
-cask "tailscale-app"
+cask "1password"           # password manager + SSH agent (used for git commit signing)
+cask "1password-cli"       # `op` — read by hf-login / gh-login / op-creds-bootstrap
+cask "tailscale-app"       # mesh VPN — `tailscale-up` pulls auth key from 1Password
 cask "claude"              # Anthropic desktop app — companion to Claude Code
 cask "obsidian"            # local-first markdown PKM; vault is plain files
 cask "appcleaner"          # clean uninstall — drag app, removes prefs/caches
+
+# Communication
+cask "slack"               # team chat
+cask "discord"             # voice/text chat — gaming + dev communities
+cask "zoom"                # video meetings
+cask "signal"              # E2E encrypted messaging
+cask "telegram"            # messaging
+
+# Media
+cask "vlc"                 # play anything; no codec hunt
+cask "iina"                # native Mac media player (Metal-rendered)
+cask "obs"                 # streaming/recording — VideoToolbox HW encode
+cask "handbrake"           # video transcoding
+cask "audacity"            # audio editor
+
+# Creative / GPU
+cask "blender"             # 3D — Cycles has a Metal backend
+cask "godot"               # game engine, native ARM64, ~100 MB
+cask "epic-games"          # Epic launcher → installs Unreal Engine
+cask "draw-things"         # local Stable Diffusion / Flux on MLX
+cask "upscayl"             # image upscaler (Real-ESRGAN, Metal)
+# Not on Homebrew (registration-walled): DaVinci Resolve
+#   https://www.blackmagicdesign.com/products/davinciresolve
+
+# Games / Windows compat
+cask "steam"               # game launcher
+cask "nvidia-geforce-now"  # cloud gaming
+cask "crossover"           # Windows app translation via GPTK + Wine
+
+# Security / wallets
+cask "yubico-authenticator" # YubiKey OATH/TOTP
+cask "ledger-live"         # hardware wallet
+cask "protonvpn"           # VPN client
+
+# Mac App Store (requires Apple ID signed into App Store; app must be
+# previously "obtained" on this Apple ID for `mas install` to succeed).
+mas "Flighty", id: 1358823008
+# Meeter (Nuvio Labs) was pulled from MAS — get it from https://meeter.app
+# Substitute: `mas "MeetingBar", id: 1532419400`
 
 # Containers
 # macOS 26+ ships native OCI container support via /usr/bin/container
