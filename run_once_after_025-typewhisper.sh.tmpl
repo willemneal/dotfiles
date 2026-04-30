@@ -1,0 +1,74 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+set -euo pipefail
+
+{{ template "brew-shellenv.sh" . -}}
+
+# TypeWhisper is distributed only as a GitHub-released DMG (not on Homebrew
+# or MAS). Fetch the latest tag, compare with the installed CFBundleShortVersionString,
+# and only download + install when out of date. Updates beyond this point are
+# handled by TypeWhisper's in-app updater.
+APP="/Applications/TypeWhisper.app"
+REPO="TypeWhisper/typewhisper-mac"
+API="https://api.github.com/repos/${REPO}/releases/latest"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "[typewhisper] jq missing — run brew bundle first." >&2
+  exit 1
+fi
+
+release_json="$(curl -fsSL "$API")"
+latest_tag="$(printf '%s' "$release_json" | jq -r '.tag_name')"
+latest_version="${latest_tag#v}"
+
+if [ -d "$APP" ]; then
+  installed_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+    "$APP/Contents/Info.plist" 2>/dev/null || echo '')"
+  if [ "$installed_version" = "$latest_version" ]; then
+    echo "[typewhisper] $latest_version already installed."
+    exit 0
+  fi
+fi
+
+dmg_url="$(printf '%s' "$release_json" \
+  | jq -r '.assets[] | select(.name | endswith(".dmg")) | .browser_download_url' \
+  | head -n1)"
+
+if [ -z "$dmg_url" ]; then
+  echo "[typewhisper] no .dmg asset in latest release ($latest_tag)" >&2
+  exit 1
+fi
+
+tmp="$(mktemp -d)"
+mountpoint=""
+cleanup() {
+  if [ -n "$mountpoint" ] && [ -d "$mountpoint" ]; then
+    hdiutil detach "$mountpoint" -quiet 2>/dev/null || true
+  fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+dmg="$tmp/TypeWhisper.dmg"
+echo "[typewhisper] downloading $latest_tag"
+curl -fsSL "$dmg_url" -o "$dmg"
+
+mountpoint="$(hdiutil attach "$dmg" -nobrowse -quiet \
+  | awk -F'\t' '/\/Volumes\// { print $NF; exit }')"
+if [ -z "$mountpoint" ]; then
+  echo "[typewhisper] failed to mount DMG" >&2
+  exit 1
+fi
+
+src="$(find "$mountpoint" -maxdepth 2 -name 'TypeWhisper.app' -print -quit)"
+if [ -z "$src" ]; then
+  echo "[typewhisper] TypeWhisper.app not found in DMG" >&2
+  exit 1
+fi
+
+[ -d "$APP" ] && rm -rf "$APP"
+ditto "$src" "$APP"
+xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+
+echo "[typewhisper] installed $latest_version"
+{{ end -}}

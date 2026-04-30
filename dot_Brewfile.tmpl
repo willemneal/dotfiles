@@ -5,6 +5,7 @@
 
 # Third-party taps
 tap "nikitabobko/tap"   # aerospace
+tap "xykong/tap"        # flux-markdown (QuickLook)
 
 # CLI essentials
 brew "git"
@@ -71,12 +72,17 @@ cask "lm-studio"           # GUI for local LLMs (gguf + MLX models)
 cask "raycast"             # Spotlight replacement — launcher, snippets, clipboard, extensions
 cask "nikitabobko/tap/aerospace"  # i3-style tiling (replaces rectangle)
 cask "karabiner-elements"  # Caps Lock → Esc on tap / Hyper on hold
+cask "linearmouse"         # mouse customisation: per-device speed/scroll/buttons
 cask "1password"           # password manager + SSH agent (used for git commit signing)
 cask "1password-cli"       # `op` — read by hf-login / gh-login / op-creds-bootstrap
 cask "tailscale-app"       # mesh VPN — `tailscale-up` pulls auth key from 1Password
 cask "claude"              # Anthropic desktop app — companion to Claude Code
 cask "obsidian"            # local-first markdown PKM; vault is plain files
 cask "appcleaner"          # clean uninstall — drag app, removes prefs/caches
+cask "dockdoor"            # hover Dock icons → window previews (Alt-Tab-style peek)
+cask "xykong/tap/flux-markdown"  # QuickLook plugin: rich markdown previews (math/code/mermaid)
+# TypeWhisper (local speech-to-text) is not on Homebrew — installed by
+# run_once_after_025-typewhisper.sh from GitHub releases.
 
 # Communication
 cask "slack"               # team chat

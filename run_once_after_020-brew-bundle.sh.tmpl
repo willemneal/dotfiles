@@ -3,7 +3,18 @@
 set -euo pipefail
 
 {{ template "brew-shellenv.sh" . -}}
-brew bundle --file="$HOME/.Brewfile"
+
+# Two-pass install. `brew bundle` hangs forever on `mas "..."` lines when no
+# Apple ID is signed into the App Store (fresh Mac, CI, Tart test VM) — `mas`
+# blocks waiting for credentials that never come. Install everything else
+# first, then attempt mas entries only if a signin exists.
+brew bundle --file=<(grep -v '^mas ' "$HOME/.Brewfile")
+if mas_user="$(mas account 2>/dev/null)" && printf '%s' "$mas_user" | grep -q '@'; then
+  brew bundle --file=<(grep '^mas ' "$HOME/.Brewfile")
+else
+  echo "[brew-bundle] No App Store sign-in; skipped mas entries." >&2
+  echo "  After signing in, re-run: brew bundle --file=~/.Brewfile" >&2
+fi
 
 # Strip Gatekeeper quarantine xattr from casks that often trip the
 # "Apple could not verify..." dialog on first launch. Missing apps are
@@ -23,6 +34,6 @@ done
 # Surface permission prompts now (during bootstrap) rather than days
 # later. Karabiner first so its DriverKit driver is approved before
 # AeroSpace's bindings rely on the Hyper key.
-[ -d /Applications/Karabiner-Elements.app ] && open -a "Karabiner-Elements" || true
-[ -d /Applications/AeroSpace.app ] && open -a "AeroSpace" || true
+if [ -d /Applications/Karabiner-Elements.app ]; then open -a "Karabiner-Elements" || true; fi
+if [ -d /Applications/AeroSpace.app ]; then open -a "AeroSpace" || true; fi
 {{ end -}}
