@@ -7,6 +7,15 @@
 set -euo pipefail
 
 PLIST=/Library/LaunchDaemons/local.iogpu.wired-limit.plist
+
+# `iogpu` is only present on hosts with Apple Silicon GPUs exposed via the
+# native macOS GPU stack. Tart/Virtualization.framework guests don't see it,
+# nor do Intel Macs. Skip cleanly in those cases.
+if ! sysctl -n iogpu.wired_limit_mb >/dev/null 2>&1; then
+  echo "iogpu sysctl not available on this host; skipping wired-limit setup" >&2
+  exit 0
+fi
+
 phys_mb=$(($(sysctl -n hw.memsize) / 1024 / 1024))
 target=$(( (phys_mb * 95 / 100) / 1024 * 1024 ))
 

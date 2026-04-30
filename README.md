@@ -101,6 +101,7 @@ fire on the next pass.
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
 ├── run_once_before_010-install-homebrew.sh.tmpl
 ├── run_once_after_020-brew-bundle.sh.tmpl
+├── run_once_after_025-typewhisper.sh.tmpl     install TypeWhisper from GitHub DMG
 ├── run_once_after_030-ai-stack.sh.tmpl         uv + MLX playground (AI hosts)
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
 ├── run_once_after_040-macos-defaults.sh.tmpl
@@ -127,9 +128,10 @@ On macOS, `chezmoi apply` runs seven ordered `run_once_` scripts:
    - Editor: zed.
    - Dev: uv, mise, node.
    - Rust toolchain: rustup, cargo-binstall.
-   - Productivity: raycast, aerospace, karabiner-elements, 1password,
-     1password-cli, tailscale-app, claude (Anthropic desktop), obsidian,
-     appcleaner.
+   - Productivity: raycast, aerospace, karabiner-elements, linearmouse
+     (mouse customisation), 1password, 1password-cli, tailscale-app,
+     claude (Anthropic desktop), obsidian, appcleaner, dockdoor (Dock
+     icon window previews), xykong/tap/flux-markdown (Markdown QuickLook).
    - Communication: slack, discord, zoom, signal, telegram.
    - Media: vlc, iina, obs, handbrake, audacity.
    - Creative / GPU: blender, godot, epic-games (Epic launcher → Unreal),
