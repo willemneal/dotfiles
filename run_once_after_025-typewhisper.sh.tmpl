@@ -5,20 +5,44 @@ set -euo pipefail
 {{ template "brew-shellenv.sh" . -}}
 
 # TypeWhisper is distributed only as a GitHub-released DMG (not on Homebrew
-# or MAS). Fetch the latest tag, compare with the installed CFBundleShortVersionString,
-# and only download + install when out of date. Updates beyond this point are
-# handled by TypeWhisper's in-app updater.
+# or MAS). Fetch the latest *app* release, compare with the installed
+# CFBundleShortVersionString, and only download + install when out of date.
+# Updates beyond this point are handled by TypeWhisper's in-app updater.
+#
+# All failures here exit 0: TypeWhisper is non-essential and a network blip,
+# release-asset oddity, or DMG hiccup must not abort the rest of the apply
+# (chezmoi treats a non-zero run_once_after as fatal for the whole run).
 APP="/Applications/TypeWhisper.app"
 REPO="TypeWhisper/typewhisper-mac"
-API="https://api.github.com/repos/${REPO}/releases/latest"
+# /releases/latest returns whichever non-prerelease+non-draft is newest by
+# created_at. The repo also publishes plugin releases (`plugin-foo-v…`,
+# .zip-only) under the same repo, which sort ahead of app releases by
+# date. Pull the full list and filter to releases that actually ship a
+# .dmg — that's the strongest "this is an app release" signal.
+API="https://api.github.com/repos/${REPO}/releases?per_page=100"
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "[typewhisper] jq missing — run brew bundle first." >&2
-  exit 1
+  echo "[typewhisper] jq missing — skipping (run brew bundle first)." >&2
+  exit 0
 fi
 
-release_json="$(curl -fsSL "$API")"
-latest_tag="$(printf '%s' "$release_json" | jq -r '.tag_name')"
+release_json="$(curl -fsSL "$API")" || {
+  echo "[typewhisper] could not reach GitHub API; skipping." >&2
+  exit 0
+}
+
+release="$(printf '%s' "$release_json" | jq -c '
+  [ .[] | select(.prerelease == false and .draft == false)
+        | select([.assets[]? | .name | endswith(".dmg")] | any) ]
+  | first
+')"
+
+if [ -z "$release" ] || [ "$release" = "null" ]; then
+  echo "[typewhisper] no stable release with a .dmg asset in last 100 releases; skipping." >&2
+  exit 0
+fi
+
+latest_tag="$(printf '%s' "$release" | jq -r '.tag_name')"
 latest_version="${latest_tag#v}"
 
 if [ -d "$APP" ]; then
@@ -30,13 +54,13 @@ if [ -d "$APP" ]; then
   fi
 fi
 
-dmg_url="$(printf '%s' "$release_json" \
+dmg_url="$(printf '%s' "$release" \
   | jq -r '.assets[] | select(.name | endswith(".dmg")) | .browser_download_url' \
   | head -n1)"
 
 if [ -z "$dmg_url" ]; then
-  echo "[typewhisper] no .dmg asset in latest release ($latest_tag)" >&2
-  exit 1
+  echo "[typewhisper] release $latest_tag advertised a .dmg but extraction failed; skipping." >&2
+  exit 0
 fi
 
 tmp="$(mktemp -d)"
@@ -51,19 +75,22 @@ trap cleanup EXIT
 
 dmg="$tmp/TypeWhisper.dmg"
 echo "[typewhisper] downloading $latest_tag"
-curl -fsSL "$dmg_url" -o "$dmg"
+if ! curl -fsSL "$dmg_url" -o "$dmg"; then
+  echo "[typewhisper] download failed; skipping." >&2
+  exit 0
+fi
 
 mountpoint="$(hdiutil attach "$dmg" -nobrowse -quiet \
   | awk -F'\t' '/\/Volumes\// { print $NF; exit }')"
 if [ -z "$mountpoint" ]; then
-  echo "[typewhisper] failed to mount DMG" >&2
-  exit 1
+  echo "[typewhisper] failed to mount DMG; skipping." >&2
+  exit 0
 fi
 
 src="$(find "$mountpoint" -maxdepth 2 -name 'TypeWhisper.app' -print -quit)"
 if [ -z "$src" ]; then
-  echo "[typewhisper] TypeWhisper.app not found in DMG" >&2
-  exit 1
+  echo "[typewhisper] TypeWhisper.app not found in DMG; skipping." >&2
+  exit 0
 fi
 
 [ -d "$APP" ] && rm -rf "$APP"
