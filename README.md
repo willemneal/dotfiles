@@ -25,8 +25,14 @@ repo onto the new Mac, then:
 
 ```sh
 ./bootstrap.sh        # interactive, against the real github.com/willemneal/dotfiles
-./bootstrap.sh --test # uses a VirtioFS-mounted source (for VM smoke testing)
 ```
+
+To smoke-test bootstrap end-to-end without a fresh Mac, run **`./e2e-test.sh`**
+on a macOS host. It boots a fresh Tart VM (`cirruslabs/macos-sequoia-base`),
+VirtioFS-mounts the repo read-only, enables passwordless sudo for the admin
+user, and runs `./bootstrap.sh --test` inside the guest. `--clean` deletes the
+VM on success; failures leave it up for inspection. Requires
+`brew install cirruslabs/cli/tart`.
 
 **Manual steps (equivalent):**
 
@@ -67,6 +73,8 @@ fire on the next pass.
 ```
 .
 ├── bootstrap.sh                                fresh-Mac one-shot (hostname + chezmoi init + apply)
+├── e2e-test.sh                                 host-side Tart driver: VM + bootstrap.sh --test
+├── CLAUDE.md                                   in-repo Claude Code guidance (gating, run_once order, gotchas)
 ├── .chezmoi.toml.tmpl                          one-time prompts (name, email)
 ├── .chezmoidata.toml                           shared data (ai_machines list)
 ├── .chezmoiignore.tmpl                         excludes by OS / host
@@ -113,7 +121,7 @@ See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs seven ordered `run_once_` scripts:
+On macOS, `chezmoi apply` runs eight ordered `run_once_` scripts:
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
    isn't on PATH. On a truly fresh Mac this triggers the Xcode Command Line
@@ -139,41 +147,62 @@ On macOS, `chezmoi apply` runs seven ordered `run_once_` scripts:
      (Real-ESRGAN image upscaler).
    - Games / Windows compat: steam, nvidia-geforce-now, crossover.
    - Security / wallets: yubico-authenticator, ledger-live, protonvpn.
-   - Mac App Store (via `mas`): Flighty. Requires the App Store to be
-     signed in *and* the app to have been "obtained" once on this Apple
-     ID — otherwise `mas install` errors out (brew bundle continues past
-     the failure). See the Brewfile for substitutes (Meeter via direct
-     download, MeetingBar/Dato via App Store).
+   - Mac App Store (via `mas`): Flighty. Installed in a **second pass**
+     only if `mas account` reports a signed-in Apple ID — `brew bundle`
+     would otherwise hang forever on `mas` lines waiting for credentials
+     (a fresh Mac, CI, and the Tart test VM all hit this). Sign in via
+     App Store → Settings → Apple Account, then re-run
+     `brew bundle --file=~/.Brewfile`. The app must also have been
+     "obtained" once on this Apple ID before `mas install` will succeed.
+     See the Brewfile for substitutes (Meeter via direct download,
+     MeetingBar/Dato via App Store).
    - Containers: nothing by default — macOS 26+ ships a native `container`
      CLI. The Brewfile has a commented `cask "orbstack"` to uncomment if
      you need docker-compose, multi-arch, k8s, or a GUI.
    - On hosts in `.chezmoidata.toml` `[hosts] ai_machines`: also llama.cpp,
      ollama, whisper-cpp, asitop, mactop, and the lm-studio cask.
-3. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
+   - **TypeWhisper** (local speech-to-text overlay) is *not* on Homebrew or
+     the App Store; it's installed by step 3 (`025-typewhisper`) directly
+     from a GitHub release DMG.
+3. **`025-typewhisper`** — fetches the latest `TypeWhisper/typewhisper-mac`
+   release from GitHub, mounts the DMG, copies `TypeWhisper.app` into
+   `/Applications`. Idempotent: skips if installed `CFBundleShortVersionString`
+   already matches `tag_name`. Subsequent updates are handled by
+   TypeWhisper's in-app updater. Depends on `jq` from step 2.
+4. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
    `~/.cache/huggingface`, `~/ai/playground`. `uv init`s the playground at
    Python 3.12 with `mlx`, `mlx-lm`, `mlx-vlm`, `huggingface-hub`,
    `hf-transfer`, `jupyter`, `ipython`, `rich`. Writes a `.envrc` that
    auto-syncs and activates the venv on `cd`.
-4. **`035-iogpu-limit`** *(host-gated)* — installs a LaunchDaemon plist at
+5. **`035-iogpu-limit`** *(host-gated)* — installs a LaunchDaemon plist at
    `/Library/LaunchDaemons/local.iogpu.wired-limit.plist` that re-applies
    `iogpu.wired_limit_mb` to ~95 % of physical memory at every boot. Without
    this, macOS resets the limit to ~75 %, eating into the headroom you need
-   for 70B+ models. **Needs sudo on first run.**
-5. **`040-macos-defaults`** — Finder visibility, fast key repeat, screenshots
+   for 70B+ models. **Needs sudo on first run.** Skips cleanly when the
+   `iogpu` sysctl isn't present (Tart guests, Intel Macs).
+6. **`040-macos-defaults`** — Finder visibility, fast key repeat, screenshots
    to `~/Desktop/Screenshots`, no `.DS_Store` on network/USB.
-6. **`045-time-machine`** *(host-gated)* — `tmutil addexclusion` for `~/Models`,
+7. **`045-time-machine`** *(host-gated)* — `tmutil addexclusion` for `~/Models`,
    `~/.cache/huggingface`, `~/.cache/uv`, and `~/ai/playground/.venv`. These
    are large and re-downloadable; backing them up wastes snapshots.
-7. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
+8. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
    `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
 
 After bootstrap you'll want a few one-time setup steps:
 
 ```sh
+eval "$(op signin)"          # 1Password CLI session — needed for op-creds-bootstrap
+op-creds-bootstrap           # populate every credential the *-login helpers expect
 rustup default stable        # install the actual Rust compiler/cargo
 atuin import auto            # ingest existing ~/.zsh_history into atuin
 nvim                         # first launch downloads LazyVim plugins (~10s)
 ```
+
+`op-creds-bootstrap` walks the inventory at `~/.config/op-creds` (HuggingFace,
+Tailscale, GitHub CLI, OpenRouter, OpenRouter Provisioning) and prompts for
+any items you haven't already created in 1Password. See the
+[Bootstrap 1Password credentials](#bootstrap-1password-credentials) section
+for the full walk-through.
 
 In Karabiner-Elements and AeroSpace, accept the macOS permission prompts on
 first launch (Input Monitoring, Accessibility). They both auto-start on login
