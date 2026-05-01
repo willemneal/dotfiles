@@ -8,12 +8,26 @@ set -euo pipefail
 # Apple ID is signed into the App Store (fresh Mac, CI, Tart test VM) — `mas`
 # blocks waiting for credentials that never come. Install everything else
 # first, then attempt mas entries only if a signin exists.
-brew bundle --file=<(grep -v '^mas ' "$HOME/.Brewfile")
+#
+# Both passes are best-effort: a single broken cask (vendor pulled it, the
+# download URL 404s, hash mismatch, etc.) shouldn't abort the rest of the
+# bootstrap. Track failures and report a single summary at the end so the
+# user can re-run after fixing or commenting out the offender.
+failed=0
+brew bundle --file=<(grep -v '^mas ' "$HOME/.Brewfile") || failed=$?
+
 if mas_user="$(mas account 2>/dev/null)" && printf '%s' "$mas_user" | grep -q '@'; then
-  brew bundle --file=<(grep '^mas ' "$HOME/.Brewfile")
+  brew bundle --file=<(grep '^mas ' "$HOME/.Brewfile") || failed=$?
 else
   echo "[brew-bundle] No App Store sign-in; skipped mas entries." >&2
   echo "  After signing in, re-run: brew bundle --file=~/.Brewfile" >&2
+fi
+
+if [ "$failed" -ne 0 ]; then
+  echo >&2
+  echo "[brew-bundle] One or more entries failed (see output above)." >&2
+  echo "  Continuing bootstrap. Re-run after resolving:" >&2
+  echo "    brew bundle --file=~/.Brewfile" >&2
 fi
 
 # Strip Gatekeeper quarantine xattr from casks that often trip the
