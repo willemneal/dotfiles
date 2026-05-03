@@ -59,11 +59,11 @@ if command -v ollama >/dev/null 2>&1; then
     warn "ollama daemon: not running (\`ollama serve\` or open the app)"
   fi
 fi
-if [ -x "$PLAYGROUND/.venv/bin/huggingface-cli" ]; then
-  if user=$(cd "$PLAYGROUND" && uv run huggingface-cli whoami 2>/dev/null) && [ -n "$user" ]; then
+if [ -x "$PLAYGROUND/.venv/bin/hf" ]; then
+  if user=$(cd "$PLAYGROUND" && uv run hf auth whoami 2>/dev/null | awk '/^user:/ {print $2; exit}') && [ -n "$user" ]; then
     ok "HF auth: $user"
   else
-    warn "HF auth: not logged in (run \`hf-login\` or \`huggingface-cli login\`)"
+    warn "HF auth: not logged in (run \`hf-login\` or \`hf auth login\`)"
   fi
 fi
 if curl -sfI --max-time 3 https://huggingface.co >/dev/null 2>&1; then
@@ -91,9 +91,13 @@ wired=$(sysctl -n iogpu.wired_limit_mb 2>/dev/null || echo 0)
 if [ "$wired" -eq 0 ]; then
   warn "iogpu.wired_limit_mb: 0 (system default ~75% of physical); raise for 70B+ models"
 else
-  pct=$(( wired * 100 / phys_mb ))
-  if [ "$pct" -lt 95 ]; then
-    warn "iogpu.wired_limit_mb: ${wired} MiB (${pct}% of physical) — consider raising"
+  # Compare against the LaunchDaemon's exact target (run_once_after_035-iogpu-limit
+  # rounds 95% of physical down to a 1024 MiB boundary) so the threshold here
+  # stays in sync with what the daemon actually sets.
+  target=$(( (phys_mb * 95 / 100) / 1024 * 1024 ))
+  pct=$(awk -v w="$wired" -v p="$phys_mb" 'BEGIN { printf "%.1f", w * 100 / p }')
+  if [ "$wired" -lt "$target" ]; then
+    warn "iogpu.wired_limit_mb: ${wired} MiB (${pct}% of physical) — below daemon target ${target} MiB"
   else
     ok "iogpu.wired_limit_mb: ${wired} MiB (${pct}% of physical)"
   fi
