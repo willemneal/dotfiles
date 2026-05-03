@@ -103,7 +103,8 @@ fire on the next pass.
 │       └── layouts/minimal.kdl                 compact-bar only, Linux default
 ├── dot_local/bin/
 │   ├── executable_alacritty-profile            fzf profile picker
-│   └── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   ├── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   └── executable_pi-smoke.tmpl                pi-coding-agent smoke test (--live for round-trip)
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -136,7 +137,9 @@ one `run_*` that fires every apply, called out below):
    - Zsh enhancements: zsh-autosuggestions, zsh-fast-syntax-highlighting, atuin.
    - Terminal stack: alacritty, ghostty (Metal-native), zellij.
    - Editor: zed.
-   - Dev: uv, mise, node.
+   - Dev: uv, mise, node, pi-coding-agent (Mario Zechner's `pi`
+     coding-agent CLI — Claude Code competitor; smoke-test with
+     `pi-smoke`, optionally `pi-smoke --live` for a round-trip).
    - Rust toolchain: rustup, cargo-binstall.
    - Productivity: raycast, aerospace, karabiner-elements, linearmouse
      (mouse customisation), 1password, 1password-cli, tailscale-app,
@@ -638,6 +641,33 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 
 Add the two lines above to `~/.zshenv.local` if you want every
 OpenAI-SDK tool routed through OpenRouter automatically.
+
+### Anthropic
+
+`anthropic-login` exports `ANTHROPIC_API_KEY` from 1Password. Read by
+`pi` (`pi-coding-agent`, the Mario Zechner CLI installed via the
+Brewfile) and any other tool that honours the Anthropic env var.
+
+```
+1. Mint a key at https://console.anthropic.com/settings/keys
+2. Store in 1Password:
+     New item → API Credential
+     Vault: Personal
+     Title: Anthropic
+     credential: sk-ant-…
+3. Run `anthropic-login`, then `pi-smoke --live` to verify a round-trip.
+```
+
+Prefer `openrouter-login` if you'd rather route Claude traffic through
+OpenRouter (one key, every model). Both env vars can coexist, but `pi`
+defaults to claude/Anthropic — it does not auto-fall back to OpenRouter.
+To route through OpenRouter pass the flags explicitly, e.g.
+
+    pi --provider openrouter --model anthropic/claude-3.5-sonnet
+    pi-smoke --live -- --provider openrouter --model anthropic/claude-3.5-sonnet
+
+…or use `pi /login` once to write `~/.pi/agent/auth.json`, after which
+no flags are needed.
 
 ### Bootstrap 1Password credentials
 

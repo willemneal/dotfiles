@@ -55,6 +55,16 @@ openrouter-login() {
   export OPENROUTER_API_KEY
 }
 
+# Load Anthropic API key from 1Password. Read by `pi` (pi-coding-agent;
+# defaults to claude-opus-*) and any other tool that honours
+# ANTHROPIC_API_KEY. Use openrouter-login instead if you'd rather route
+# Claude traffic through OpenRouter.
+anthropic-login() {
+  command -v op >/dev/null || { print -u2 "op (1Password CLI) not installed"; return 1; }
+  ANTHROPIC_API_KEY=$(op read "op://Personal/Anthropic/credential") || return $?
+  export ANTHROPIC_API_KEY
+}
+
 # Create an API Credential item in the Personal vault without exposing
 # the secret in argv or shell history. The secret reaches op via stdin
 # (kernel pipe — private to jq/op), never as a CLI flag.

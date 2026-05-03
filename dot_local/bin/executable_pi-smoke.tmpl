@@ -1,0 +1,124 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Smoke test for `pi` (pi-coding-agent — Mario Zechner's coding-agent CLI;
+# Claude Code competitor). Status-only by default (no network, no spend).
+# Pass --live to actually exercise the API with a one-shot prompt.
+#
+# Status mode always exits 0 (matches mai-doctor convention) so it can be
+# used in CI/dashboards without gating the run. --live propagates pi's
+# exit status: 0 on success, pi's actual code on failure.
+#
+# Pi defaults to claude/Anthropic. Routing through a different provider
+# (e.g. OpenRouter) requires explicit flags — pass them after `--`:
+#   pi-smoke --live -- --provider openrouter --model anthropic/claude-3.5-sonnet
+#   pi-smoke --live -- --model openai/gpt-4o-mini   # provider inferred
+
+set -uo pipefail
+
+LIVE=0
+EXTRA=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --live) LIVE=1; shift ;;
+    --)     shift; EXTRA=("$@"); break ;;
+    -h|--help)
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) printf "unknown arg: %s\n" "$1" >&2; exit 2 ;;
+  esac
+done
+
+issues=0
+ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
+warn() { printf "  \033[33m!\033[0m %s\n" "$*"; issues=$((issues+1)); }
+miss() { printf "  \033[31m✗\033[0m %s\n" "$*"; issues=$((issues+1)); }
+section() { printf "\n\033[1m%s\033[0m\n" "$*"; }
+
+section "Binary"
+if command -v pi >/dev/null 2>&1; then
+  ok "pi: $(command -v pi)"
+  # `pi --version` prints either "pi <semver>" or just <semver> depending
+  # on release; either is fine — we just want non-empty + non-error.
+  if v=$(pi --version 2>&1) && [ -n "$v" ]; then
+    ok "version: $v"
+  else
+    warn "pi --version: failed (\`$v\`)"
+  fi
+else
+  miss "pi: not installed (\`brew install pi-coding-agent\`)"
+fi
+
+section "Credentials"
+# Pi reads ANTHROPIC_API_KEY by default but will also accept any of the
+# other provider keys in its README. Treat *any* known provider key as
+# enough to run; warn if only ANTHROPIC is missing since that's the
+# documented default and what `anthropic-login` populates.
+present=()
+for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY OPENAI_API_KEY \
+         GOOGLE_API_KEY GROQ_API_KEY DEEPSEEK_API_KEY MISTRAL_API_KEY \
+         CEREBRAS_API_KEY MOONSHOT_API_KEY DEEPINFRA_API_KEY; do
+  # Indirect expansion: ${(P)k} is zsh-only, ${!k} is bash. This script
+  # uses `#!/usr/bin/env bash` so ${!k} is correct.
+  if [ -n "${!k:-}" ]; then
+    present+=("$k")
+  fi
+done
+if [ "${#present[@]}" -eq 0 ]; then
+  miss "no provider key in env (run \`anthropic-login\` or \`openrouter-login\`)"
+else
+  ok "provider keys set: ${present[*]}"
+  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+    warn "ANTHROPIC_API_KEY unset — pi defaults to claude; --live needs \`-- --provider <name> --model <slug>\`"
+  fi
+fi
+
+section "Settings"
+SETTINGS="$HOME/.pi/agent/settings.json"
+if [ -f "$SETTINGS" ]; then
+  ok "settings: $SETTINGS"
+  if command -v jq >/dev/null 2>&1; then
+    prov=$(jq -r '.default_provider // "(unset)"' "$SETTINGS" 2>/dev/null || echo "(parse error)")
+    model=$(jq -r '.default_model    // "(unset)"' "$SETTINGS" 2>/dev/null || echo "(parse error)")
+    ok "default_provider: $prov / default_model: $model"
+  fi
+else
+  warn "settings: not yet created (pi writes $SETTINGS on first run)"
+fi
+
+if [ "$LIVE" -eq 1 ]; then
+  section "Live probe"
+  if ! command -v pi >/dev/null 2>&1; then
+    miss "pi not installed; cannot run --live"
+  elif [ "${#present[@]}" -eq 0 ]; then
+    miss "no provider key; cannot run --live"
+  else
+    # Single-shot, no session, no tools required. Ask for a fixed token so
+    # the response is unambiguous and short. --no-session keeps no JSONL
+    # on disk under ~/.pi/agent/sessions/. Extra args (e.g. --provider,
+    # --model) are forwarded verbatim from anything after `--`.
+    # ${EXTRA[@]+"${EXTRA[@]}"} expands to nothing when EXTRA is empty —
+    # required because `set -u` + bash 3.2 (stock macOS) errors on a bare
+    # "${empty[@]}". Bash 4.4+ wouldn't need this, but /usr/bin/env bash
+    # resolves to /bin/bash on systems without homebrew bash.
+    out=$(pi --no-session ${EXTRA[@]+"${EXTRA[@]}"} -p 'Reply with exactly the word: PONG' 2>&1)
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      miss "pi -p failed (exit $rc): $out"
+      exit "$rc"
+    fi
+    if printf '%s' "$out" | grep -qi 'PONG'; then
+      ok "live round-trip: PONG received"
+    else
+      warn "live round-trip: response did not contain PONG"
+      printf '    %s\n' "$out" | head -5
+    fi
+  fi
+fi
+
+if [ "$issues" -eq 0 ]; then
+  printf "\n\033[32mOK\033[0m\n"
+else
+  printf "\nIssues found: %d\n" "$issues"
+fi
+exit 0
+{{ end -}}
