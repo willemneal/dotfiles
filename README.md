@@ -138,7 +138,8 @@ On macOS, `chezmoi apply` runs eight ordered `run_once_` scripts:
    - Rust toolchain: rustup, cargo-binstall.
    - Productivity: raycast, aerospace, karabiner-elements, linearmouse
      (mouse customisation), 1password, 1password-cli, tailscale-app,
-     claude (Anthropic desktop), obsidian, appcleaner, dockdoor (Dock
+     claude (Anthropic desktop), claude-code (Anthropic's `claude`
+     terminal CLI), obsidian, appcleaner, dockdoor (Dock
      icon window previews), xykong/tap/flux-markdown (Markdown QuickLook).
    - Communication: slack, discord, zoom, signal, telegram.
    - Media: vlc, iina, obs, handbrake, audacity.
