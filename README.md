@@ -109,6 +109,7 @@ fire on the next pass.
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
 ├── run_once_before_010-install-homebrew.sh.tmpl
 ├── run_once_after_020-brew-bundle.sh.tmpl
+├── run_after_022-fpath-perms.sh.tmpl          chmod g-w,o-w on Homebrew share dir (every apply)
 ├── run_once_after_025-typewhisper.sh.tmpl     install TypeWhisper from GitHub DMG
 ├── run_once_after_030-ai-stack.sh.tmpl         uv + MLX playground (AI hosts)
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
@@ -121,7 +122,8 @@ See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs eight ordered `run_once_` scripts:
+On macOS, `chezmoi apply` runs nine ordered scripts (eight `run_once_*` plus
+one `run_*` that fires every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
    isn't on PATH. On a truly fresh Mac this triggers the Xcode Command Line
@@ -163,30 +165,37 @@ On macOS, `chezmoi apply` runs eight ordered `run_once_` scripts:
    - On hosts in `.chezmoidata.toml` `[hosts] ai_machines`: also llama.cpp,
      ollama, whisper-cpp, asitop, mactop, and the lm-studio cask.
    - **TypeWhisper** (local speech-to-text overlay) is *not* on Homebrew or
-     the App Store; it's installed by step 3 (`025-typewhisper`) directly
+     the App Store; it's installed by step 4 (`025-typewhisper`) directly
      from a GitHub release DMG.
-3. **`025-typewhisper`** — fetches the latest `TypeWhisper/typewhisper-mac`
+3. **`022-fpath-perms`** *(every apply, not `run_once_`)* — drops group/other
+   write on any directory `compaudit` flags. On Apple Silicon Homebrew installs
+   `/opt/homebrew/share` group-writable so multiple admin users can install
+   formulae, which trips zsh's `compinit` security check on every fresh shell
+   (`compinit: insecure directories, run compaudit for list.`). Wired in as
+   `run_after_*` rather than `run_once_*` because brew upgrades occasionally
+   reset the perms; the check is silent and ~50 ms when nothing's flagged.
+4. **`025-typewhisper`** — fetches the latest `TypeWhisper/typewhisper-mac`
    release from GitHub, mounts the DMG, copies `TypeWhisper.app` into
    `/Applications`. Idempotent: skips if installed `CFBundleShortVersionString`
    already matches `tag_name`. Subsequent updates are handled by
    TypeWhisper's in-app updater. Depends on `jq` from step 2.
-4. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
+5. **`030-ai-stack`** *(host-gated)* — ensures `uv`, creates `~/Models`,
    `~/.cache/huggingface`, `~/ai/playground`. `uv init`s the playground at
    Python 3.12 with `mlx`, `mlx-lm`, `mlx-vlm`, `huggingface-hub`,
    `hf-transfer`, `jupyter`, `ipython`, `rich`. Writes a `.envrc` that
    auto-syncs and activates the venv on `cd`.
-5. **`035-iogpu-limit`** *(host-gated)* — installs a LaunchDaemon plist at
+6. **`035-iogpu-limit`** *(host-gated)* — installs a LaunchDaemon plist at
    `/Library/LaunchDaemons/local.iogpu.wired-limit.plist` that re-applies
    `iogpu.wired_limit_mb` to ~95 % of physical memory at every boot. Without
    this, macOS resets the limit to ~75 %, eating into the headroom you need
    for 70B+ models. **Needs sudo on first run.** Skips cleanly when the
    `iogpu` sysctl isn't present (Tart guests, Intel Macs).
-6. **`040-macos-defaults`** — Finder visibility, fast key repeat, screenshots
+7. **`040-macos-defaults`** — Finder visibility, fast key repeat, screenshots
    to `~/Desktop/Screenshots`, no `.DS_Store` on network/USB.
-7. **`045-time-machine`** *(host-gated)* — `tmutil addexclusion` for `~/Models`,
+8. **`045-time-machine`** *(host-gated)* — `tmutil addexclusion` for `~/Models`,
    `~/.cache/huggingface`, `~/.cache/uv`, and `~/ai/playground/.venv`. These
    are large and re-downloadable; backing them up wastes snapshots.
-8. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
+9. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
    `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
 
 After bootstrap you'll want a few one-time setup steps:

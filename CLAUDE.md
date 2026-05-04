@@ -41,6 +41,7 @@ End-to-end integration test is `./bootstrap.sh --test` against a fresh Tart macO
 - `private_X` → `chmod 600`.
 - `*.tmpl` → Go-template-rendered, suffix stripped after rendering.
 - `run_once_before_NNN-name.sh.tmpl` and `run_once_after_NNN-name.sh.tmpl` run in numeric order; before init / after apply respectively. Re-run only when content hash changes.
+- `run_after_NNN-name.sh.tmpl` (no `_once`) runs every apply, in numeric order alongside the `run_once_after_*` scripts. Used for invariants that drift, not one-time setup.
 - `.chezmoitemplates/` holds reusable partials called via `{{ template "name" . }}`. They are NOT applied directly.
 
 ## Two gating mechanisms
@@ -65,16 +66,17 @@ On Linux this renders to empty and chezmoi skips the file.
 
 The hostname must be set *before* `chezmoi apply` for these blocks to fire. `bootstrap.sh` handles this; manual installs require `sudo scutil --set HostName mai` first or a re-apply afterward.
 
-## Run_once script order (macOS)
+## Script run order (macOS)
 
 1. `010-install-homebrew` — bootstraps brew if missing.
 2. `020-brew-bundle` — `brew bundle --file=~/.Brewfile`.
-3. `025-typewhisper` — install TypeWhisper.app from GitHub releases (not on Homebrew/MAS); idempotent via `CFBundleShortVersionString` vs `tag_name`. Relies on `jq` from step 2.
-4. `030-ai-stack` *(host-gated)* — uv playground at `~/ai/playground` with mlx/mlx-lm/mlx-vlm.
-5. `035-iogpu-limit` *(host-gated)* — LaunchDaemon to persist `iogpu.wired_limit_mb` to ~95% of physical.
-6. `040-macos-defaults` — Finder visibility, key repeat, screenshot dir, etc.
-7. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
-8. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
+3. `022-fpath-perms` *(every apply)* — `chmod g-w,o-w` any compaudit-flagged dir. Homebrew leaves `/opt/homebrew/share` 775; trips zsh's `compinit` on a fresh shell.
+4. `025-typewhisper` — install TypeWhisper.app from GitHub releases (not on Homebrew/MAS); idempotent via `CFBundleShortVersionString` vs `tag_name`. Relies on `jq` from step 2.
+5. `030-ai-stack` *(host-gated)* — uv playground at `~/ai/playground` with mlx/mlx-lm/mlx-vlm.
+6. `035-iogpu-limit` *(host-gated)* — LaunchDaemon to persist `iogpu.wired_limit_mb` to ~95% of physical.
+7. `040-macos-defaults` — Finder visibility, key repeat, screenshot dir, etc.
+8. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
+9. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
 
 ## Secret handling
 
