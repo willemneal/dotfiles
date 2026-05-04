@@ -143,6 +143,7 @@ one `run_*` that fires every apply, called out below):
      claude (Anthropic desktop), claude-code (Anthropic's `claude`
      terminal CLI), obsidian, appcleaner, dockdoor (Dock
      icon window previews), xykong/tap/flux-markdown (Markdown QuickLook).
+   - Browsers: zen (Gecko-based, Firefox fork).
    - Communication: slack, discord, zoom, signal, telegram.
    - Media: vlc, iina, obs, handbrake, audacity.
    - Creative / GPU: blender, godot, epic-games (Epic launcher → Unreal),

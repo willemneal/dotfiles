@@ -89,7 +89,7 @@ Defense-in-depth: `dot_config/atuin/config.toml` has a `history_filter` regex li
 
 ## Brewfile organization
 
-`dot_Brewfile.tmpl` is sectioned by purpose (CLI essentials, Rust replacements, Terminal stack, Editors, Dev, Productivity, Communication, Media, Creative/GPU, Games, Security, Mac App Store, Containers). Each cask has a trailing `# comment` aligned to roughly column 28; comments call out something distinguishing rather than restating the name. AI-only packages sit inside the host-gating block.
+`dot_Brewfile.tmpl` is sectioned by purpose (CLI essentials, Rust replacements, Terminal stack, Editors, Dev, Productivity, Browsers, Communication, Media, Creative/GPU, Games, Security, Mac App Store, Containers). Each cask has a trailing `# comment` aligned to roughly column 28; comments call out something distinguishing rather than restating the name. AI-only packages sit inside the host-gating block.
 
 `mas` (Mac App Store CLI) lives in CLI essentials so it's installed before any `mas "Name", id: NNN` lines are reached. Order matters in a Brewfile.
 
