@@ -1,0 +1,21 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Drop group/other write on any fpath ancestor that compaudit flags. zsh's
+# compinit refuses to load completions from an fpath whose ancestors are
+# group-writable; Apple Silicon Homebrew installs /opt/homebrew/share 775
+# so multiple admin users can install formulae, which trips the check on
+# a fresh shell with "compinit: insecure directories, run compaudit...".
+# Runs every apply (not run_once_) because brew upgrades occasionally
+# reset the perms; the check is silent and ~50ms when clean.
+set -euo pipefail
+
+while IFS= read -r dir; do
+  [ -n "$dir" ] && [ -e "$dir" ] || continue
+  if [ -O "$dir" ]; then
+    chmod g-w,o-w "$dir"
+    echo "[fpath-perms] $dir → g-w,o-w"
+  else
+    echo "[fpath-perms] $dir not owned by $USER; run: sudo chmod g-w,o-w '$dir'" >&2
+  fi
+done < <(zsh -c 'autoload -Uz compaudit && compaudit' 2>/dev/null || true)
+{{ end -}}
