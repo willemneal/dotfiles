@@ -6,6 +6,12 @@ export PATH="$HOME/.local/bin:$PATH"
 export EDITOR=nvim
 export VISUAL="$EDITOR"
 
+# 1Password SSH agent — keep ssh-add/git/gh/etc. consistent with the
+# IdentityAgent set in ~/.ssh/config. Without this, tools that read
+# SSH_AUTH_SOCK directly (bypassing ssh_config) hit Apple's launchd
+# agent instead of 1Password and report no identities.
+export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export MODELS_DIR="$HOME/Models"
 # export HF_HOME="/Volumes/External/hf"
