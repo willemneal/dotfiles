@@ -8,9 +8,15 @@
 # used in CI/dashboards without gating the run. --live propagates pi's
 # exit status: 0 on success, pi's actual code on failure.
 #
-# Pi defaults to claude/Anthropic. Routing through a different provider
-# (e.g. OpenRouter) requires explicit flags — pass them after `--`:
-#   pi-smoke --live -- --provider openrouter --model anthropic/claude-3.5-sonnet
+# Pi itself defaults to claude/Anthropic, but this harness prefers
+# OpenRouter: when OPENROUTER_API_KEY is set and no `--` overrides are
+# given, --live auto-injects `--provider openrouter --model <slug>`. The
+# slug is `anthropic/claude-3.5-sonnet` by default; override with the
+# PI_SMOKE_OPENROUTER_MODEL env var. Anthropic is used as a fallback
+# only when OPENROUTER_API_KEY is unset.
+#
+# Force a different provider/model by passing flags after `--`:
+#   pi-smoke --live -- --provider anthropic --model claude-3-5-sonnet-latest
 #   pi-smoke --live -- --model openai/gpt-4o-mini   # provider inferred
 
 set -uo pipefail
@@ -49,12 +55,11 @@ else
 fi
 
 section "Credentials"
-# Pi reads ANTHROPIC_API_KEY by default but will also accept any of the
-# other provider keys in its README. Treat *any* known provider key as
-# enough to run; warn if only ANTHROPIC is missing since that's the
-# documented default and what `anthropic-login` populates.
+# OpenRouter is the preferred route (one key, every model, this harness
+# auto-injects the flags). Anthropic is the fallback when OpenRouter is
+# absent. Listed first below so the `present` order reflects priority.
 present=()
-for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY OPENAI_API_KEY \
+for k in OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY \
          GOOGLE_API_KEY GROQ_API_KEY DEEPSEEK_API_KEY MISTRAL_API_KEY \
          CEREBRAS_API_KEY MOONSHOT_API_KEY DEEPINFRA_API_KEY; do
   # Indirect expansion: ${(P)k} is zsh-only, ${!k} is bash. This script
@@ -64,11 +69,13 @@ for k in ANTHROPIC_API_KEY OPENROUTER_API_KEY OPENAI_API_KEY \
   fi
 done
 if [ "${#present[@]}" -eq 0 ]; then
-  miss "no provider key in env (run \`anthropic-login\` or \`openrouter-login\`)"
+  miss "no provider key in env (run \`openrouter-login\` — preferred — or \`anthropic-login\`)"
 else
   ok "provider keys set: ${present[*]}"
-  if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-    warn "ANTHROPIC_API_KEY unset — pi defaults to claude; --live needs \`-- --provider <name> --model <slug>\`"
+  if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+    ok "routing: OpenRouter (--live auto-injects \`--provider openrouter --model <slug>\`)"
+  else
+    warn "OPENROUTER_API_KEY unset — falling back to Anthropic; \`openrouter-login\` is preferred"
   fi
 fi
 
@@ -100,6 +107,14 @@ if [ "$LIVE" -eq 1 ]; then
     # required because `set -u` + bash 3.2 (stock macOS) errors on a bare
     # "${empty[@]}". Bash 4.4+ wouldn't need this, but /usr/bin/env bash
     # resolves to /bin/bash on systems without homebrew bash.
+    #
+    # Auto-route through OpenRouter when its key is set and the user
+    # didn't supply explicit overrides. Pi's own default is Anthropic,
+    # so without this the harness would silently bypass OpenRouter even
+    # when both keys are present.
+    if [ "${#EXTRA[@]}" -eq 0 ] && [ -n "${OPENROUTER_API_KEY:-}" ]; then
+      EXTRA=(--provider openrouter --model "${PI_SMOKE_OPENROUTER_MODEL:-anthropic/claude-3.5-sonnet}")
+    fi
     out=$(pi --no-session ${EXTRA[@]+"${EXTRA[@]}"} -p 'Reply with exactly the word: PONG' 2>&1)
     rc=$?
     if [ "$rc" -ne 0 ]; then

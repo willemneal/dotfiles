@@ -642,11 +642,23 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 Add the two lines above to `~/.zshenv.local` if you want every
 OpenAI-SDK tool routed through OpenRouter automatically.
 
-### Anthropic
+### Anthropic (fallback for `pi`)
 
 `anthropic-login` exports `ANTHROPIC_API_KEY` from 1Password. Read by
 `pi` (`pi-coding-agent`, the Mario Zechner CLI installed via the
 Brewfile) and any other tool that honours the Anthropic env var.
+
+**Prefer `openrouter-login` for `pi`.** OpenRouter is one key for every
+model, and `pi-smoke` is wired to auto-route through it: when
+`OPENROUTER_API_KEY` is set and no `--` overrides are supplied,
+`pi-smoke --live` injects `--provider openrouter --model
+anthropic/claude-3.5-sonnet` (override the slug with
+`PI_SMOKE_OPENROUTER_MODEL`). Anthropic is used only as a fallback when
+the OpenRouter key is absent — `pi` itself does *not* auto-fall back,
+which is why the harness prefers OpenRouter explicitly.
+
+Set up Anthropic only if you want to bypass OpenRouter (direct billing,
+console-pinned keys, etc.):
 
 ```
 1. Mint a key at https://console.anthropic.com/settings/keys
@@ -658,13 +670,11 @@ Brewfile) and any other tool that honours the Anthropic env var.
 3. Run `anthropic-login`, then `pi-smoke --live` to verify a round-trip.
 ```
 
-Prefer `openrouter-login` if you'd rather route Claude traffic through
-OpenRouter (one key, every model). Both env vars can coexist, but `pi`
-defaults to claude/Anthropic — it does not auto-fall back to OpenRouter.
-To route through OpenRouter pass the flags explicitly, e.g.
+To force a specific provider/model regardless of which keys are set,
+pass flags after `--`:
 
-    pi --provider openrouter --model anthropic/claude-3.5-sonnet
-    pi-smoke --live -- --provider openrouter --model anthropic/claude-3.5-sonnet
+    pi-smoke --live -- --provider anthropic --model claude-3-5-sonnet-latest
+    pi-smoke --live -- --model openai/gpt-4o-mini
 
 …or use `pi /login` once to write `~/.pi/agent/auth.json`, after which
 no flags are needed.

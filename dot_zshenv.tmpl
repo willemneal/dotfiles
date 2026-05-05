@@ -55,10 +55,11 @@ openrouter-login() {
   export OPENROUTER_API_KEY
 }
 
-# Load Anthropic API key from 1Password. Read by `pi` (pi-coding-agent;
-# defaults to claude-opus-*) and any other tool that honours
-# ANTHROPIC_API_KEY. Use openrouter-login instead if you'd rather route
-# Claude traffic through OpenRouter.
+# Load Anthropic API key from 1Password. Fallback for `pi`
+# (pi-coding-agent) when OpenRouter isn't available — `pi-smoke` prefers
+# OpenRouter and auto-routes through it when OPENROUTER_API_KEY is set.
+# Run `openrouter-login` first; only fall back to this for direct
+# Anthropic billing or console-pinned keys.
 anthropic-login() {
   command -v op >/dev/null || { print -u2 "op (1Password CLI) not installed"; return 1; }
   ANTHROPIC_API_KEY=$(op read "op://Personal/Anthropic/credential") || return $?
