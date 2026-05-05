@@ -103,7 +103,8 @@ fire on the next pass.
 │       └── layouts/minimal.kdl                 compact-bar only, Linux default
 ├── dot_local/bin/
 │   ├── executable_alacritty-profile            fzf profile picker
-│   └── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   ├── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   └── executable_pi-smoke.tmpl                pi-coding-agent smoke test (--live for round-trip)
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -136,7 +137,9 @@ one `run_*` that fires every apply, called out below):
    - Zsh enhancements: zsh-autosuggestions, zsh-fast-syntax-highlighting, atuin.
    - Terminal stack: alacritty, ghostty (Metal-native), zellij.
    - Editor: zed.
-   - Dev: uv, mise, node.
+   - Dev: uv, mise, node, pi-coding-agent (Mario Zechner's `pi`
+     coding-agent CLI — Claude Code competitor; smoke-test with
+     `pi-smoke`, optionally `pi-smoke --live` for a round-trip).
    - Rust toolchain: rustup, cargo-binstall.
    - Productivity: raycast, aerospace, karabiner-elements, linearmouse
      (mouse customisation), 1password, 1password-cli, tailscale-app,
@@ -638,6 +641,43 @@ export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 
 Add the two lines above to `~/.zshenv.local` if you want every
 OpenAI-SDK tool routed through OpenRouter automatically.
+
+### Anthropic (fallback for `pi`)
+
+`anthropic-login` exports `ANTHROPIC_API_KEY` from 1Password. Read by
+`pi` (`pi-coding-agent`, the Mario Zechner CLI installed via the
+Brewfile) and any other tool that honours the Anthropic env var.
+
+**Prefer `openrouter-login` for `pi`.** OpenRouter is one key for every
+model, and `pi-smoke` is wired to auto-route through it: when
+`OPENROUTER_API_KEY` is set and no `--` overrides are supplied,
+`pi-smoke --live` injects `--provider openrouter --model
+anthropic/claude-3.5-sonnet` (override the slug with
+`PI_SMOKE_OPENROUTER_MODEL`). Anthropic is used only as a fallback when
+the OpenRouter key is absent — `pi` itself does *not* auto-fall back,
+which is why the harness prefers OpenRouter explicitly.
+
+Set up Anthropic only if you want to bypass OpenRouter (direct billing,
+console-pinned keys, etc.):
+
+```
+1. Mint a key at https://console.anthropic.com/settings/keys
+2. Store in 1Password:
+     New item → API Credential
+     Vault: Personal
+     Title: Anthropic
+     credential: sk-ant-…
+3. Run `anthropic-login`, then `pi-smoke --live` to verify a round-trip.
+```
+
+To force a specific provider/model regardless of which keys are set,
+pass flags after `--`:
+
+    pi-smoke --live -- --provider anthropic --model claude-3-5-sonnet-latest
+    pi-smoke --live -- --model openai/gpt-4o-mini
+
+…or use `pi /login` once to write `~/.pi/agent/auth.json`, after which
+no flags are needed.
 
 ### Bootstrap 1Password credentials
 

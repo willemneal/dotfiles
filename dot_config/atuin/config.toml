@@ -30,6 +30,7 @@ history_filter = [
   ".*api[_-]?key",
   ".*HF_TOKEN=",
   ".*TS_AUTHKEY=",
+  ".*ANTHROPIC_API_KEY=",
 ]
 
 # Don't even *show* these in search if they somehow got recorded
