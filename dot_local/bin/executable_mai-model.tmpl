@@ -11,6 +11,7 @@ set -uo pipefail
 MODELS_DIR="${MAI_MODELS_DIR:-$HOME/Models}"
 PLAYGROUND="${MAI_PLAYGROUND:-$HOME/ai/playground}"
 PYTHON="${MAI_MODEL_PYTHON:-$PLAYGROUND/.venv/bin/python}"
+HELPER="${MAI_MODEL_HELPER:-$HOME/.local/share/mai-model/helper.py}"
 
 die()  { printf "mai-model: %s\n" "$*" >&2; exit 1; }
 warn() { printf "mai-model: %s\n" "$*" >&2; }
@@ -194,6 +195,18 @@ cmd_bench() {
   printf "\nlogged to %s\n" "$log"
 }
 
+cmd_run_all() {
+  require_python
+  [ -f "$HELPER" ] || die "helper missing at $HELPER — run \`chezmoi apply\` first"
+  exec env MAI_MODELS_DIR="$MODELS_DIR" "$PYTHON" "$HELPER" run-all "$@"
+}
+
+cmd_serve() {
+  require_python
+  [ -f "$HELPER" ] || die "helper missing at $HELPER — run \`chezmoi apply\` first"
+  exec env MAI_MODELS_DIR="$MODELS_DIR" "$PYTHON" "$HELPER" serve "$@"
+}
+
 cmd_info() {
   local name="${1:-}"
   ensure_model "$name"
@@ -225,9 +238,11 @@ Usage:
   mai-model list                          list configured models
   mai-model new   <name> <hf-repo> [run]  scaffold ~/Models/<name>/ (runner defaults to mlx-lm)
   mai-model pull  <name>                  download weights for <name>
-  mai-model run   <name> <prompt...>      generate (reads stdin if no prompt args)
-  mai-model bench <name>                  run a fixed prompt and log to runs/
-  mai-model info  <name>                  show TOML + disk usage + last bench
+  mai-model run     <name> <prompt...>    generate (reads stdin if no prompt args)
+  mai-model run-all <prompt...>           run the prompt against every configured model
+  mai-model bench   <name>                run a fixed prompt and log to runs/
+  mai-model serve   [--port N]            HTTP viewer for run-all sets (default :7860)
+  mai-model info    <name>                show TOML + disk usage + last bench
 
 Layout:
   Per-model dir:  $MODELS_DIR/<name>/
@@ -254,7 +269,9 @@ main() {
     new|init)       cmd_new "$@" ;;
     pull|download)  cmd_pull "$@" ;;
     run|generate)   cmd_run "$@" ;;
+    run-all|all)    cmd_run_all "$@" ;;
     bench)          cmd_bench "$@" ;;
+    serve|view)     cmd_serve "$@" ;;
     info|show)      cmd_info "$@" ;;
     ""|-h|--help|help) usage ;;
     *)              usage; exit 2 ;;

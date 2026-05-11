@@ -1,0 +1,353 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env python3
+# mai-model helper — backs `mai-model run-all` and `mai-model serve`.
+# Lives at ~/.local/share/mai-model/helper.py; the bash CLI execs us.
+# stdlib-only (Python 3.11+ for tomllib).
+import argparse
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import tomllib
+import urllib.parse
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+MODELS_DIR = Path(os.environ.get("MAI_MODELS_DIR", Path.home() / "Models"))
+RUNS_DIR = MODELS_DIR / ".runs"
+MAI_MODEL_BIN = Path.home() / ".local/bin/mai-model"
+
+# mlx-lm prints these three lines after generation:
+#   Prompt: 45 tokens, 50.240 tokens-per-sec
+#   Generation: 17 tokens, 14.226 tokens-per-sec
+#   Peak memory: 39.840 GB
+RE_PROMPT = re.compile(r"Prompt:\s+(\d+)\s+tokens,\s+([\d.]+)\s+tokens-per-sec")
+RE_GEN = re.compile(r"Generation:\s+(\d+)\s+tokens,\s+([\d.]+)\s+tokens-per-sec")
+RE_MEM = re.compile(r"Peak memory:\s+([\d.]+)\s+GB")
+RE_STAMP = re.compile(r"^[0-9]{8}T[0-9]{6}Z$")
+
+
+def list_models():
+    if not MODELS_DIR.exists():
+        return []
+    out = []
+    for d in sorted(MODELS_DIR.iterdir()):
+        if d.name.startswith("."):
+            continue
+        toml = d / "model.toml"
+        if not toml.exists():
+            continue
+        try:
+            data = tomllib.loads(toml.read_text())
+        except tomllib.TOMLDecodeError:
+            continue
+        out.append(
+            {
+                "name": d.name,
+                "hf_repo": data.get("hf_repo", ""),
+                "runner": data.get("runner", "mlx-lm"),
+                "notes": data.get("notes", ""),
+            }
+        )
+    return out
+
+
+def extract_response(stdout: str) -> str:
+    # mlx-lm wraps the generation in ==========\n...\n========== fences.
+    parts = stdout.split("==========")
+    if len(parts) >= 3:
+        return parts[1].strip()
+    return stdout.strip()
+
+
+def parse_metrics(stdout: str) -> dict:
+    metrics = {}
+    if m := RE_PROMPT.search(stdout):
+        metrics["prompt_tokens"] = int(m.group(1))
+        metrics["prompt_tps"] = float(m.group(2))
+    if m := RE_GEN.search(stdout):
+        metrics["gen_tokens"] = int(m.group(1))
+        metrics["gen_tps"] = float(m.group(2))
+    if m := RE_MEM.search(stdout):
+        metrics["peak_memory_gb"] = float(m.group(1))
+    return metrics
+
+
+def run_one(name: str, prompt: str, run_dir: Path) -> dict:
+    log = run_dir / f"{name}.log"
+    started = time.time()
+    proc = subprocess.run(
+        [str(MAI_MODEL_BIN), "run", name, prompt],
+        capture_output=True,
+        text=True,
+    )
+    duration = time.time() - started
+    output = proc.stdout
+    if proc.stderr:
+        output += "\n[STDERR]\n" + proc.stderr
+    log.write_text(output)
+    response = extract_response(proc.stdout) if proc.returncode == 0 else ""
+    return {
+        "name": name,
+        "response": response,
+        "log_file": log.name,
+        "exit_code": proc.returncode,
+        "duration_s": round(duration, 3),
+        **parse_metrics(proc.stdout),
+    }
+
+
+def cmd_run_all(args):
+    prompt = (args.prompt or sys.stdin.read()).strip()
+    if not prompt:
+        sys.exit("mai-model: empty prompt")
+    models = list_models()
+    if not models:
+        sys.exit("mai-model: no models configured (try `mai-model new <name> <hf-repo>`)")
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = RUNS_DIR / stamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "prompt.txt").write_text(prompt + "\n")
+
+    print(f"mai-model run-all → {run_dir}")
+    print(f"  models: {', '.join(m['name'] for m in models)}")
+    print()
+
+    results = []
+    for m in models:
+        print(f"=== {m['name']} ===", flush=True)
+        r = run_one(m["name"], prompt, run_dir)
+        if r["exit_code"] != 0:
+            print(f"  FAILED (exit={r['exit_code']}) — see {r['log_file']}")
+        else:
+            short = (r["response"] or "").splitlines()
+            preview = short[0][:80] if short else "(no response captured)"
+            tag_bits = []
+            if "gen_tps" in r:
+                tag_bits.append(f"{r['gen_tps']:.1f} t/s")
+            if "peak_memory_gb" in r:
+                tag_bits.append(f"{r['peak_memory_gb']:.1f} GB")
+            tag_bits.append(f"{r['duration_s']:.1f}s")
+            print(f"  {preview}")
+            print(f"  [{' · '.join(tag_bits)}]")
+        print()
+        results.append(r)
+
+    manifest = {
+        "stamp": stamp,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "prompt": prompt,
+        "results": results,
+    }
+    (run_dir / "results.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"→ {run_dir}/results.json")
+    print(f"  view: mai-model serve   then open http://localhost:{args.serve_port}/")
+
+
+def load_runs():
+    if not RUNS_DIR.exists():
+        return []
+    out = []
+    for d in sorted(RUNS_DIR.iterdir(), reverse=True):
+        if not RE_STAMP.match(d.name):
+            continue
+        rj = d / "results.json"
+        if not rj.exists():
+            continue
+        try:
+            out.append(json.loads(rj.read_text()))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+CSS = """
+* { box-sizing: border-box; }
+body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro", sans-serif;
+       max-width: 1200px; margin: 2em auto; padding: 0 1em;
+       color: #1a1a1a; background: #fafafa; }
+h1, h2, h3 { font-weight: 600; }
+h1 { margin-top: 0; }
+header { display: flex; align-items: baseline; gap: 1em; margin-bottom: 1em; }
+a, .back { color: #0366d6; text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 90%; }
+ul { padding-left: 1.2em; }
+.run-card { background: white; border: 1px solid #ddd; border-radius: 8px;
+            padding: 0.75em 1em; margin: 0.5em 0; }
+.prompt-preview { color: #666; }
+.results { display: grid;
+           grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+           gap: 1em; margin-top: 1em; }
+.result { background: white; border: 1px solid #ddd; border-radius: 8px;
+          padding: 1em; }
+.result h3 { margin: 0 0 0.3em; }
+.result .metrics { color: #666; font-size: 12px; margin-bottom: 0.5em; }
+.result.failed { border-color: #d73a49; background: #ffeef0; }
+.result pre { background: #f6f8fa; padding: 0.75em; border-radius: 4px;
+              overflow-x: auto; white-space: pre-wrap; font-size: 13px;
+              margin: 0; }
+.prompt-box { background: #fffbe6; border: 1px solid #faecaa; border-radius: 8px;
+              padding: 1em; margin: 1em 0; }
+.prompt-box pre { white-space: pre-wrap; margin: 0.5em 0 0; font-size: 14px; }
+.empty { color: #888; padding: 2em; text-align: center; background: white;
+         border: 1px dashed #ddd; border-radius: 8px; }
+.models-list { background: white; border: 1px solid #ddd; border-radius: 8px;
+               padding: 0.5em 1em 0.5em 2em; }
+"""
+
+
+def render_index(runs, models) -> str:
+    rows = []
+    for r in runs:
+        preview = (r.get("prompt") or "").replace("\n", " ")[:140]
+        n = len(r.get("results", []))
+        rows.append(
+            f'<div class="run-card">'
+            f'<a href="/runs/{html.escape(r["stamp"])}"><strong>{html.escape(r["stamp"])}</strong></a>'
+            f' &middot; {n} model{"s" if n != 1 else ""}'
+            f' &middot; <span class="prompt-preview">{html.escape(preview)}</span>'
+            f'</div>'
+        )
+    runs_html = "\n".join(rows) or (
+        '<div class="empty">No runs yet. Try '
+        '<code>mai-model run-all "your prompt"</code>.</div>'
+    )
+    model_items = "\n".join(
+        f'<li><code>{html.escape(m["name"])}</code> &mdash; '
+        f'<code>{html.escape(m["hf_repo"])}</code> '
+        f'<span class="prompt-preview">({html.escape(m["runner"])})</span></li>'
+        for m in models
+    ) or '<li class="prompt-preview">(none configured)</li>'
+    return f"""<!doctype html><html lang=en><head>
+<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>mai-model runs</title><link rel=stylesheet href=/css>
+</head><body>
+<h1>mai-model runs</h1>
+<h2>Configured models ({len(models)})</h2>
+<ul class=models-list>{model_items}</ul>
+<h2>Run history ({len(runs)})</h2>
+{runs_html}
+</body></html>"""
+
+
+def render_run(run) -> str:
+    cards = []
+    for r in run.get("results", []):
+        failed = r.get("exit_code", 0) != 0
+        bits = []
+        if "gen_tps" in r:
+            bits.append(f"{r['gen_tps']:.1f} t/s")
+        if "peak_memory_gb" in r:
+            bits.append(f"{r['peak_memory_gb']:.1f} GB")
+        if "duration_s" in r:
+            bits.append(f"{r['duration_s']:.1f}s")
+        if failed:
+            bits.append(f"exit={r['exit_code']}")
+        metrics = " &middot; ".join(html.escape(b) for b in bits) or "(no metrics parsed)"
+        body = r.get("response") or "(no response captured — see log file)"
+        cls = "result failed" if failed else "result"
+        cards.append(
+            f'<div class="{cls}">'
+            f'<h3>{html.escape(r["name"])}</h3>'
+            f'<div class="metrics">{metrics}</div>'
+            f'<pre>{html.escape(body)}</pre>'
+            f"</div>"
+        )
+    cards_html = "\n".join(cards)
+    return f"""<!doctype html><html lang=en><head>
+<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>{html.escape(run["stamp"])} — mai-model</title><link rel=stylesheet href=/css>
+</head><body>
+<header><a class=back href=/>← all runs</a><h1>{html.escape(run["stamp"])}</h1></header>
+<div class="prompt-box"><strong>Prompt</strong><pre>{html.escape(run["prompt"])}</pre></div>
+<div class=results>{cards_html}</div>
+</body></html>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "mai-model-serve/1.0"
+
+    def log_message(self, fmt, *args):
+        sys.stderr.write(
+            f"[mai-model serve] {self.address_string()} {fmt % args}\n"
+        )
+
+    def _send(self, body: bytes, status: int, content_type: str):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _html(self, body: str, status: int = 200):
+        self._send(body.encode("utf-8"), status, "text/html; charset=utf-8")
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/css":
+            self._send(CSS.encode("utf-8"), 200, "text/css; charset=utf-8")
+            return
+        if parsed.path == "/":
+            self._html(render_index(load_runs(), list_models()))
+            return
+        m = re.match(r"^/runs/([0-9TZ]+)$", parsed.path)
+        if m:
+            stamp = m.group(1)
+            if not RE_STAMP.match(stamp):
+                self._html("<h1>404</h1>", 404)
+                return
+            rj = RUNS_DIR / stamp / "results.json"
+            if not rj.exists():
+                self._html("<h1>404 — no such run</h1>", 404)
+                return
+            try:
+                data = json.loads(rj.read_text())
+            except json.JSONDecodeError:
+                self._html("<h1>500 — bad results.json</h1>", 500)
+                return
+            self._html(render_run(data))
+            return
+        self._html("<h1>404</h1>", 404)
+
+
+def cmd_serve(args):
+    addr = (args.bind, args.port)
+    print(f"mai-model serve: http://{addr[0]}:{addr[1]}  (Ctrl-C to stop)")
+    print(f"  models dir: {MODELS_DIR}")
+    print(f"  runs dir:   {RUNS_DIR}")
+    srv = ThreadingHTTPServer(addr, Handler)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("\nmai-model serve: shutting down")
+        srv.shutdown()
+
+
+def main():
+    p = argparse.ArgumentParser(prog="mai-model-helper")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    rp = sub.add_parser("run-all", help="run a prompt against every configured model")
+    rp.add_argument("prompt", nargs="?")
+    rp.add_argument("--serve-port", type=int, default=7860,
+                    help="port mentioned in the success hint (default: 7860)")
+    rp.set_defaults(func=cmd_run_all)
+
+    sp = sub.add_parser("serve", help="HTTP viewer for run-sets")
+    sp.add_argument("--port", type=int, default=7860)
+    sp.add_argument("--bind", default="127.0.0.1")
+    sp.set_defaults(func=cmd_serve)
+
+    args = p.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
+{{ end -}}

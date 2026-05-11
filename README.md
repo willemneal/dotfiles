@@ -105,6 +105,8 @@ fire on the next pass.
 │   ├── executable_alacritty-profile            fzf profile picker
 │   ├── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
 │   └── executable_mai-model.tmpl               local model manager (mac, AI hosts)
+├── dot_local/share/mai-model/
+│   └── executable_helper.py.tmpl               Python backend for run-all + serve
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -255,6 +257,25 @@ mai-model new qwen2.5-coder mlx-community/Qwen2.5-Coder-32B-Instruct-4bit
 mai-model pull qwen2.5-coder
 mai-model run  qwen2.5-coder "Write a Rust iterator that yields fibonacci."
 ```
+
+### Comparing models on the same prompt
+
+`run-all` iterates every configured model in sequence (single GPU, can't
+parallelise) and captures the response + mlx-lm metrics (tokens/sec, peak
+memory, wall-clock) for each:
+
+```sh
+mai-model run-all "Explain MoE routing in two sentences."
+# → ~/Models/.runs/<utc-stamp>/{prompt.txt, <model>.log, results.json}
+
+mai-model serve              # open http://localhost:7860/
+```
+
+`serve` is an stdlib-only HTTP viewer that lists run-sets and renders all
+model responses side-by-side with their metrics. It's a foreground process
+bound to `127.0.0.1` — `Ctrl-C` to stop. Wrap it in a LaunchAgent if you
+want it always-on (no plist is shipped because most users only want it
+running on demand).
 
 The TOML lives at `~/Models/<name>/model.toml`. Set `runner = "ollama"` (with
 `ollama_model = "..."`) or `runner = "llama.cpp"` (with `hf_repo` + `gguf_file`)

@@ -89,6 +89,8 @@ The hostname must be set *before* `chezmoi apply` for these blocks to fire. `boo
 
 TOML parsing is done via the playground venv's Python 3.12 `tomllib` (`$HOME/ai/playground/.venv/bin/python`). Override with `MAI_MODEL_PYTHON` if you want a different interpreter; override `MAI_MODELS_DIR` to point at a non-default models dir (useful for testing).
 
+`run-all` and `serve` delegate to a stdlib-only Python helper at `~/.local/share/mai-model/helper.py` (sibling template `dot_local/share/mai-model/executable_helper.py.tmpl`). The bash CLI re-execs the helper with `MAI_MODELS_DIR` forwarded; the helper parses each `model.toml`, runs each model via `mai-model run <name>` as a subprocess (so runner selection logic stays in one place), parses mlx-lm's stdout for tokens/sec + peak memory + token counts, and writes `~/Models/.runs/<utc-stamp>/results.json`. `serve` is `http.server.ThreadingHTTPServer` bound to `127.0.0.1` with two routes: `/` (run-set list) and `/runs/<stamp>` (side-by-side viewer). No external Python deps; everything works against the playground venv's Python.
+
 ## Secret handling
 
 Never inline secrets in templates. Two patterns are in use:
