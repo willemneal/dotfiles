@@ -78,6 +78,7 @@ The hostname must be set *before* `chezmoi apply` for these blocks to fire. `boo
 8. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
 9. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
 10. `055-models-repo` *(host-gated)* — `git init`s `~/Models/` as its own repo (separate history from dotfiles), seeds `.gitignore` (excludes `*.gguf`/`*.safetensors`/etc), a `README.md`, and one example model dir. Pairs with the `mai-model` CLI in `dot_local/bin/`. Weights stay in `~/.cache/huggingface/hub`.
+11. `060-mai-model-serve` *(every apply, not `run_once_`, host-gated)* — `launchctl bootstrap gui/$UID` the `local.mai-model-serve` LaunchAgent. Idempotent via SHA-256 sentinel at `~/Library/Caches/local.mai-model-serve.hash`; when the plist hash matches and the service is loaded, the script is a no-op. Otherwise `bootout` + `bootstrap` and update the sentinel. The plist itself is templated at `dot_Library/LaunchAgents/local.mai-model-serve.plist.tmpl`; edits to the plist re-fire the reload on the next apply because the hash changes.
 
 ## Local models (`mai-model`)
 

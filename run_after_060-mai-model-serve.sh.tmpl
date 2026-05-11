@@ -1,0 +1,48 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# Load (or reload) the mai-model-serve LaunchAgent. Runs every apply so
+# plist edits get picked up — but is a cheap no-op when nothing changed.
+#
+# The plist lives at ~/Library/LaunchAgents/local.mai-model-serve.plist
+# (placed by chezmoi). This script just owns the launchctl side: bootstrap
+# on first apply, bootout+bootstrap when the plist content hash changes.
+set -euo pipefail
+
+PLIST="$HOME/Library/LaunchAgents/local.mai-model-serve.plist"
+DOMAIN="gui/$(id -u)"
+SVC="$DOMAIN/local.mai-model-serve"
+HASH_FILE="$HOME/Library/Caches/local.mai-model-serve.hash"
+
+# Gate: the plist is host-gated, so on a non-AI host it never gets placed —
+# this script also renders to empty there. Belt-and-braces:
+[ -f "$PLIST" ] || { echo "mai-model-serve: plist not present at $PLIST; skipping"; exit 0; }
+
+# `mai-model serve` needs the binary on disk; if the bootstrap order ever
+# slipped, fail loud rather than spawn-loop launchd.
+[ -x "$HOME/.local/bin/mai-model" ] || {
+  echo "mai-model-serve: $HOME/.local/bin/mai-model missing; skipping (chezmoi will create it on next apply)" >&2
+  exit 0
+}
+
+current=$(shasum -a 256 "$PLIST" | awk '{print $1}')
+prev=$(cat "$HASH_FILE" 2>/dev/null || true)
+
+loaded=0
+launchctl print "$SVC" >/dev/null 2>&1 && loaded=1
+
+if [ "$current" = "$prev" ] && [ "$loaded" = "1" ]; then
+  exit 0
+fi
+
+if [ "$loaded" = "1" ]; then
+  launchctl bootout "$SVC" 2>/dev/null || true
+fi
+
+launchctl bootstrap "$DOMAIN" "$PLIST"
+mkdir -p "$(dirname "$HASH_FILE")"
+printf "%s\n" "$current" > "$HASH_FILE"
+
+echo "mai-model-serve: loaded — http://127.0.0.1:7860/"
+echo "  logs: ~/Library/Logs/mai-model-serve.{out,err}.log"
+echo "  control: launchctl {kickstart -k,bootout,print} $SVC"
+{{ end -}}

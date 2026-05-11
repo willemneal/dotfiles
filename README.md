@@ -107,6 +107,8 @@ fire on the next pass.
 │   └── executable_mai-model.tmpl               local model manager (mac, AI hosts)
 ├── dot_local/share/mai-model/
 │   └── executable_helper.py.tmpl               Python backend for run-all + serve
+├── dot_Library/LaunchAgents/
+│   └── local.mai-model-serve.plist.tmpl        per-user launchd: keeps mai-model serve running
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -119,15 +121,16 @@ fire on the next pass.
 ├── run_once_after_040-macos-defaults.sh.tmpl
 ├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
 ├── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
-└── run_once_after_055-models-repo.sh.tmpl     git-init ~/Models + seed example (AI hosts)
+├── run_once_after_055-models-repo.sh.tmpl     git-init ~/Models + seed example (AI hosts)
+└── run_after_060-mai-model-serve.sh.tmpl      bootstrap+reload mai-model-serve LaunchAgent (every apply, AI hosts)
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs ten ordered scripts (nine `run_once_*` plus
-one `run_*` that fires every apply, called out below):
+On macOS, `chezmoi apply` runs eleven ordered scripts (nine `run_once_*` plus
+two `run_*` that fire every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
    isn't on PATH. On a truly fresh Mac this triggers the Xcode Command Line
@@ -209,6 +212,16 @@ one `run_*` that fires every apply, called out below):
     `git init`, `.gitignore`, `README.md`, and example each skip if already
     present. Weights themselves stay in `~/.cache/huggingface/hub` and are
     not committed.
+11. **`060-mai-model-serve`** *(every apply, host-gated)* — loads the
+    `local.mai-model-serve` LaunchAgent (from
+    `~/Library/LaunchAgents/local.mai-model-serve.plist`) into
+    `gui/$UID`. Idempotent via a SHA-256 sentinel at
+    `~/Library/Caches/local.mai-model-serve.hash`: when the plist content
+    matches the sentinel and the service is loaded, the script is a
+    no-op. Otherwise: `bootout` then `bootstrap`, and update the sentinel.
+    The agent runs `mai-model serve --bind 127.0.0.1 --port 7860` at
+    login, restarts on crash (10s throttle), and logs to
+    `~/Library/Logs/mai-model-serve.{out,err}.log`.
 
 After bootstrap you'll want a few one-time setup steps:
 
@@ -272,10 +285,23 @@ mai-model serve              # open http://localhost:7860/
 ```
 
 `serve` is an stdlib-only HTTP viewer that lists run-sets and renders all
-model responses side-by-side with their metrics. It's a foreground process
-bound to `127.0.0.1` — `Ctrl-C` to stop. Wrap it in a LaunchAgent if you
-want it always-on (no plist is shipped because most users only want it
-running on demand).
+model responses side-by-side with their metrics, bound to `127.0.0.1`. On
+AI hosts the `local.mai-model-serve` LaunchAgent (script `060`, plist
+`~/Library/LaunchAgents/local.mai-model-serve.plist`) keeps it running at
+`http://127.0.0.1:7860/` across logins and restarts it on crash.
+
+Control surface:
+
+```sh
+launchctl print    gui/$UID/local.mai-model-serve   # status, pid, exit codes
+launchctl kickstart -k gui/$UID/local.mai-model-serve   # restart now
+launchctl bootout  gui/$UID/local.mai-model-serve   # stop (until next apply/login)
+tail -F ~/Library/Logs/mai-model-serve.err.log      # request access log + tracebacks
+```
+
+`mai-model serve` also works as a foreground command (`Ctrl-C` to stop) if
+you want to run it on a different port or bind without disturbing the
+agent — `mai-model serve --port 7861`.
 
 The TOML lives at `~/Models/<name>/model.toml`. Set `runner = "ollama"` (with
 `ollama_model = "..."`) or `runner = "llama.cpp"` (with `hf_repo` + `gguf_file`)
