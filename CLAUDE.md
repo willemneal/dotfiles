@@ -77,6 +77,22 @@ The hostname must be set *before* `chezmoi apply` for these blocks to fire. `boo
 7. `040-macos-defaults` — Finder visibility, key repeat, screenshot dir, etc.
 8. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
 9. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
+10. `055-models-repo` *(host-gated)* — `git init`s `~/Models/` as its own repo (separate history from dotfiles), seeds `.gitignore` (excludes `*.gguf`/`*.safetensors`/etc), a `README.md`, and one example model dir. Pairs with the `mai-model` CLI in `dot_local/bin/`. Weights stay in `~/.cache/huggingface/hub`.
+11. `060-mai-model-serve` *(every apply, not `run_once_`, host-gated)* — `launchctl bootstrap gui/$UID` the `local.mai-model-serve` LaunchAgent. Idempotent via SHA-256 sentinel at `~/Library/Caches/local.mai-model-serve.hash`; when the plist hash matches and the service is loaded, the script is a no-op. Otherwise `bootout` + `bootstrap` and update the sentinel. The plist itself is templated at `dot_Library/LaunchAgents/local.mai-model-serve.plist.tmpl`; edits to the plist re-fire the reload on the next apply because the hash changes.
+
+The plist deliberately binds the server to `127.0.0.1`, not `0.0.0.0`. The macOS Application Firewall is often off on this box, so binding to all interfaces would expose model prompts on every wifi/LAN the machine joins. Tailnet sharing is opt-in via `tailscale serve --bg --https=PORT 7860`, which keeps the bind on loopback and lets the Tailscale daemon proxy the service to tailnet members (scoped by Tailscale ACLs). Persisted across reboots by `--bg`. Not codified as a chezmoi script because it requires `tailscaled` to be authenticated, which isn't guaranteed at first-apply time — see the README "Sharing with someone on your tailnet" section for the one-liner.
+
+## Local models (`mai-model`)
+
+`~/Models/<name>/` is one model per folder, each with a `model.toml` (HF repo, runner, generation params) and `runs/` for bench logs. Weights live in the HF cache; the per-model dir owns metadata only. The CLI dispatches to one of three runners based on `runner =`:
+
+- `mlx-lm` (default) — fast path on Apple Silicon; requires an `mlx-community` repo.
+- `ollama` — uses `ollama_model = "<tag>"` from TOML.
+- `llama.cpp` — uses `hf_repo` + `gguf_file` from TOML.
+
+TOML parsing is done via the playground venv's Python 3.12 `tomllib` (`$HOME/ai/playground/.venv/bin/python`). Override with `MAI_MODEL_PYTHON` if you want a different interpreter; override `MAI_MODELS_DIR` to point at a non-default models dir (useful for testing).
+
+`run-all` and `serve` delegate to a stdlib-only Python helper at `~/.local/share/mai-model/helper.py` (sibling template `dot_local/share/mai-model/executable_helper.py.tmpl`). The bash CLI re-execs the helper with `MAI_MODELS_DIR` forwarded; the helper parses each `model.toml`, runs each model via `mai-model run <name>` as a subprocess (so runner selection logic stays in one place), parses mlx-lm's stdout for tokens/sec + peak memory + token counts, and writes `~/Models/.runs/<utc-stamp>/results.json`. `serve` is `http.server.ThreadingHTTPServer` bound to `127.0.0.1` with two routes: `/` (run-set list) and `/runs/<stamp>` (side-by-side viewer). No external Python deps; everything works against the playground venv's Python.
 
 ## Secret handling
 

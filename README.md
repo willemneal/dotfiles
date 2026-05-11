@@ -104,7 +104,12 @@ fire on the next pass.
 ├── dot_local/bin/
 │   ├── executable_alacritty-profile            fzf profile picker
 │   ├── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   ├── executable_mai-model.tmpl               local model manager (mac, AI hosts)
 │   └── executable_pi-smoke.tmpl                pi-coding-agent smoke test (--live for round-trip)
+├── dot_local/share/mai-model/
+│   └── executable_helper.py.tmpl               Python backend for run-all + serve
+├── dot_Library/LaunchAgents/
+│   └── local.mai-model-serve.plist.tmpl        per-user launchd: keeps mai-model serve running
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -116,15 +121,17 @@ fire on the next pass.
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
 ├── run_once_after_040-macos-defaults.sh.tmpl
 ├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
-└── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+├── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+├── run_once_after_055-models-repo.sh.tmpl     git-init ~/Models + seed example (AI hosts)
+└── run_after_060-mai-model-serve.sh.tmpl      bootstrap+reload mai-model-serve LaunchAgent (every apply, AI hosts)
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs nine ordered scripts (eight `run_once_*` plus
-one `run_*` that fires every apply, called out below):
+On macOS, `chezmoi apply` runs eleven ordered scripts (nine `run_once_*` plus
+two `run_*` that fire every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
    isn't on PATH. On a truly fresh Mac this triggers the Xcode Command Line
@@ -201,6 +208,23 @@ one `run_*` that fires every apply, called out below):
    are large and re-downloadable; backing them up wastes snapshots.
 9. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
    `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
+10. **`055-models-repo`** *(host-gated)* — `git init`s `~/Models` as its
+    own repo for per-model configs and notes (separate history from
+    dotfiles), seeds a `.gitignore` that excludes weight artifacts, a
+    `README.md`, and one worked example (`llama-3.3-70b/`). Idempotent: the
+    `git init`, `.gitignore`, `README.md`, and example each skip if already
+    present. Weights themselves stay in `~/.cache/huggingface/hub` and are
+    not committed.
+11. **`060-mai-model-serve`** *(every apply, host-gated)* — loads the
+    `local.mai-model-serve` LaunchAgent (from
+    `~/Library/LaunchAgents/local.mai-model-serve.plist`) into
+    `gui/$UID`. Idempotent via a SHA-256 sentinel at
+    `~/Library/Caches/local.mai-model-serve.hash`: when the plist content
+    matches the sentinel and the service is loaded, the script is a
+    no-op. Otherwise: `bootout` then `bootstrap`, and update the sentinel.
+    The agent runs `mai-model serve --bind 127.0.0.1 --port 7860` at
+    login, restarts on crash (10s throttle), and logs to
+    `~/Library/Logs/mai-model-serve.{out,err}.log`.
 
 After bootstrap you'll want a few one-time setup steps:
 
@@ -229,11 +253,92 @@ relative to physical memory.
 
 ### First model
 
+`mai-model` (installed by step 10 above) manages models declaratively. Each
+model is a folder under `~/Models/<name>/` with a `model.toml` describing
+the HF repo, runner, and generation params; weights themselves stay in the
+HuggingFace cache.
+
 ```sh
 hf-login                                                 # exports HF_TOKEN
-hfd mlx-community/Llama-3.3-70B-Instruct-4bit            # ~40 GB download
-play                                                      # cd to playground + open repl
-# or
+mai-model list                                           # see configured models (the seeded example)
+mai-model pull  llama-3.3-70b                            # ~40 GB to HF cache
+mai-model run   llama-3.3-70b "Explain MoE routing in two sentences."
+mai-model bench llama-3.3-70b                            # fixed prompt → runs/bench-<utc>.log
+```
+
+To try another model:
+
+```sh
+mai-model new qwen2.5-coder mlx-community/Qwen2.5-Coder-32B-Instruct-4bit
+mai-model pull qwen2.5-coder
+mai-model run  qwen2.5-coder "Write a Rust iterator that yields fibonacci."
+```
+
+### Comparing models on the same prompt
+
+`run-all` iterates every configured model in sequence (single GPU, can't
+parallelise) and captures the response + mlx-lm metrics (tokens/sec, peak
+memory, wall-clock) for each:
+
+```sh
+mai-model run-all "Explain MoE routing in two sentences."
+# → ~/Models/.runs/<utc-stamp>/{prompt.txt, <model>.log, results.json}
+
+mai-model serve              # open http://localhost:7860/
+```
+
+`serve` is an stdlib-only HTTP viewer that lists run-sets and renders all
+model responses side-by-side with their metrics, bound to `127.0.0.1`. On
+AI hosts the `local.mai-model-serve` LaunchAgent (script `060`, plist
+`~/Library/LaunchAgents/local.mai-model-serve.plist`) keeps it running at
+`http://127.0.0.1:7860/` across logins and restarts it on crash.
+
+Control surface:
+
+```sh
+launchctl print    gui/$UID/local.mai-model-serve   # status, pid, exit codes
+launchctl kickstart -k gui/$UID/local.mai-model-serve   # restart now
+launchctl bootout  gui/$UID/local.mai-model-serve   # stop (until next apply/login)
+tail -F ~/Library/Logs/mai-model-serve.err.log      # request access log + tracebacks
+```
+
+`mai-model serve` also works as a foreground command (`Ctrl-C` to stop) if
+you want to run it on a different port or bind without disturbing the
+agent — `mai-model serve --port 7861`.
+
+#### Sharing with someone on your tailnet
+
+The daemon binds to `127.0.0.1` deliberately — the macOS Application
+Firewall is often off, so `--bind 0.0.0.0` would expose model prompts on
+every wifi/LAN the machine joins, not just the tailnet. The right primitive
+is **Tailscale Serve**, which keeps the bind on loopback and lets the
+Tailscale daemon proxy the service to tailnet members (scoped by your
+Tailscale ACLs):
+
+```sh
+tailscale serve --bg --https=7860 7860
+# → https://<machine>.<tailnet>.ts.net:7860/   (tailnet-only, HTTPS via magic DNS)
+
+tailscale serve status                          # see all serve configs
+tailscale serve --https=7860 off                # remove the share
+```
+
+`--bg` persists across `tailscaled` restarts and machine reboots — set it
+once. Pick a different `--https=PORT` if `7860` collides with another
+Tailscale Serve config you already have at the same host.
+
+Use `tailscale funnel` instead of `tailscale serve` if you want to expose
+the viewer to the public internet — but be aware the server has no
+authentication, so anyone with the URL can read every prompt and response.
+
+The TOML lives at `~/Models/<name>/model.toml`. Set `runner = "ollama"` (with
+`ollama_model = "..."`) or `runner = "llama.cpp"` (with `hf_repo` + `gguf_file`)
+to use those backends instead of mlx-lm. `~/Models/` is its own git repo;
+commit the configs and notes you want to keep.
+
+Raw mlx-lm still works if you'd rather skip the wrapper:
+
+```sh
 cd ~/ai/playground && uv run python -m mlx_lm.generate \
   --model mlx-community/Llama-3.3-70B-Instruct-4bit \
   --prompt "Explain MoE routing in two sentences." \
