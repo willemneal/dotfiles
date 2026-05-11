@@ -103,7 +103,8 @@ fire on the next pass.
 │       └── layouts/minimal.kdl                 compact-bar only, Linux default
 ├── dot_local/bin/
 │   ├── executable_alacritty-profile            fzf profile picker
-│   └── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   ├── executable_mai-doctor.tmpl              AI env health check (mac, AI hosts)
+│   └── executable_mai-model.tmpl               local model manager (mac, AI hosts)
 ├── dot_Brewfile.tmpl                           packages (AI bits host-gated)
 ├── dot_zshenv.tmpl, dot_zshrc.tmpl             shell env + interactive
 ├── dot_gitconfig.tmpl                          git + delta + optional 1Password signing
@@ -115,14 +116,15 @@ fire on the next pass.
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
 ├── run_once_after_040-macos-defaults.sh.tmpl
 ├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
-└── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+├── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+└── run_once_after_055-models-repo.sh.tmpl     git-init ~/Models + seed example (AI hosts)
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs nine ordered scripts (eight `run_once_*` plus
+On macOS, `chezmoi apply` runs ten ordered scripts (nine `run_once_*` plus
 one `run_*` that fires every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
@@ -198,6 +200,13 @@ one `run_*` that fires every apply, called out below):
    are large and re-downloadable; backing them up wastes snapshots.
 9. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
    `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
+10. **`055-models-repo`** *(host-gated)* — `git init`s `~/Models` as its
+    own repo for per-model configs and notes (separate history from
+    dotfiles), seeds a `.gitignore` that excludes weight artifacts, a
+    `README.md`, and one worked example (`llama-3.3-70b/`). Idempotent: the
+    `git init`, `.gitignore`, `README.md`, and example each skip if already
+    present. Weights themselves stay in `~/.cache/huggingface/hub` and are
+    not committed.
 
 After bootstrap you'll want a few one-time setup steps:
 
@@ -226,11 +235,35 @@ relative to physical memory.
 
 ### First model
 
+`mai-model` (installed by step 10 above) manages models declaratively. Each
+model is a folder under `~/Models/<name>/` with a `model.toml` describing
+the HF repo, runner, and generation params; weights themselves stay in the
+HuggingFace cache.
+
 ```sh
 hf-login                                                 # exports HF_TOKEN
-hfd mlx-community/Llama-3.3-70B-Instruct-4bit            # ~40 GB download
-play                                                      # cd to playground + open repl
-# or
+mai-model list                                           # see configured models (the seeded example)
+mai-model pull  llama-3.3-70b                            # ~40 GB to HF cache
+mai-model run   llama-3.3-70b "Explain MoE routing in two sentences."
+mai-model bench llama-3.3-70b                            # fixed prompt → runs/bench-<utc>.log
+```
+
+To try another model:
+
+```sh
+mai-model new qwen2.5-coder mlx-community/Qwen2.5-Coder-32B-Instruct-4bit
+mai-model pull qwen2.5-coder
+mai-model run  qwen2.5-coder "Write a Rust iterator that yields fibonacci."
+```
+
+The TOML lives at `~/Models/<name>/model.toml`. Set `runner = "ollama"` (with
+`ollama_model = "..."`) or `runner = "llama.cpp"` (with `hf_repo` + `gguf_file`)
+to use those backends instead of mlx-lm. `~/Models/` is its own git repo;
+commit the configs and notes you want to keep.
+
+Raw mlx-lm still works if you'd rather skip the wrapper:
+
+```sh
 cd ~/ai/playground && uv run python -m mlx_lm.generate \
   --model mlx-community/Llama-3.3-70B-Instruct-4bit \
   --prompt "Explain MoE routing in two sentences." \

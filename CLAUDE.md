@@ -77,6 +77,17 @@ The hostname must be set *before* `chezmoi apply` for these blocks to fire. `boo
 7. `040-macos-defaults` — Finder visibility, key repeat, screenshot dir, etc.
 8. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
 9. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
+10. `055-models-repo` *(host-gated)* — `git init`s `~/Models/` as its own repo (separate history from dotfiles), seeds `.gitignore` (excludes `*.gguf`/`*.safetensors`/etc), a `README.md`, and one example model dir. Pairs with the `mai-model` CLI in `dot_local/bin/`. Weights stay in `~/.cache/huggingface/hub`.
+
+## Local models (`mai-model`)
+
+`~/Models/<name>/` is one model per folder, each with a `model.toml` (HF repo, runner, generation params) and `runs/` for bench logs. Weights live in the HF cache; the per-model dir owns metadata only. The CLI dispatches to one of three runners based on `runner =`:
+
+- `mlx-lm` (default) — fast path on Apple Silicon; requires an `mlx-community` repo.
+- `ollama` — uses `ollama_model = "<tag>"` from TOML.
+- `llama.cpp` — uses `hf_repo` + `gguf_file` from TOML.
+
+TOML parsing is done via the playground venv's Python 3.12 `tomllib` (`$HOME/ai/playground/.venv/bin/python`). Override with `MAI_MODEL_PYTHON` if you want a different interpreter; override `MAI_MODELS_DIR` to point at a non-default models dir (useful for testing).
 
 ## Secret handling
 
