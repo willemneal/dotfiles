@@ -303,6 +303,31 @@ tail -F ~/Library/Logs/mai-model-serve.err.log      # request access log + trace
 you want to run it on a different port or bind without disturbing the
 agent — `mai-model serve --port 7861`.
 
+#### Sharing with someone on your tailnet
+
+The daemon binds to `127.0.0.1` deliberately — the macOS Application
+Firewall is often off, so `--bind 0.0.0.0` would expose model prompts on
+every wifi/LAN the machine joins, not just the tailnet. The right primitive
+is **Tailscale Serve**, which keeps the bind on loopback and lets the
+Tailscale daemon proxy the service to tailnet members (scoped by your
+Tailscale ACLs):
+
+```sh
+tailscale serve --bg --https=7860 7860
+# → https://<machine>.<tailnet>.ts.net:7860/   (tailnet-only, HTTPS via magic DNS)
+
+tailscale serve status                          # see all serve configs
+tailscale serve --https=7860 off                # remove the share
+```
+
+`--bg` persists across `tailscaled` restarts and machine reboots — set it
+once. Pick a different `--https=PORT` if `7860` collides with another
+Tailscale Serve config you already have at the same host.
+
+Use `tailscale funnel` instead of `tailscale serve` if you want to expose
+the viewer to the public internet — but be aware the server has no
+authentication, so anyone with the URL can read every prompt and response.
+
 The TOML lives at `~/Models/<name>/model.toml`. Set `runner = "ollama"` (with
 `ollama_model = "..."`) or `runner = "llama.cpp"` (with `hf_repo` + `gguf_file`)
 to use those backends instead of mlx-lm. `~/Models/` is its own git repo;
