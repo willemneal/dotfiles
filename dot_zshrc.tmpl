@@ -4,6 +4,10 @@ HISTSIZE=50000
 SAVEHIST=50000
 setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY INC_APPEND_HISTORY
 
+# EDITOR=nvim contains "vi", so zsh auto-selects viins. Force emacs keymap
+# so ^A/^E/^U/^K/^W behave normally.
+bindkey -e
+
 autoload -Uz compinit && compinit
 
 command -v starship >/dev/null && eval "$(starship init zsh)"
