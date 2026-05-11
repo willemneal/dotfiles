@@ -79,7 +79,9 @@ cmd_list() {
 
 cmd_new() {
   local name="${1:-}" repo="${2:-}" runner="${3:-mlx-lm}"
-  [ -n "$name" ] && [ -n "$repo" ] || die "usage: mai-model new <name> <hf-repo> [runner]"
+  if [ -z "$name" ] || [ -z "$repo" ]; then
+    die "usage: mai-model new <name> <hf-repo> [runner]"
+  fi
   local dir; dir=$(model_path "$name")
   [ -e "$dir" ] && die "$dir already exists"
   mkdir -p "$dir/runs"
@@ -170,7 +172,9 @@ cmd_run() {
       ;;
     llama.cpp)
       local gguf; gguf=$(toml_get "$toml" gguf_file)
-      [ -n "$repo" ] && [ -n "$gguf" ] || die "$toml: runner=llama.cpp requires hf_repo + gguf_file"
+      if [ -z "$repo" ] || [ -z "$gguf" ]; then
+        die "$toml: runner=llama.cpp requires hf_repo + gguf_file"
+      fi
       command -v llama-cli >/dev/null 2>&1 || die "llama-cli not installed (brew install llama.cpp)"
       llama-cli -hf "$repo:$gguf" -n "$max" --temp "$temp" -p "$prompt"
       ;;
