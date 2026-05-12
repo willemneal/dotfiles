@@ -116,14 +116,15 @@ fire on the next pass.
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
 ├── run_once_after_040-macos-defaults.sh.tmpl
 ├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
-└── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+├── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
+└── run_once_after_060-chat-stack.sh.tmpl      Open WebUI + Pocket-ID over tailnet (AI hosts)
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs nine ordered scripts (eight `run_once_*` plus
+On macOS, `chezmoi apply` runs ten ordered scripts (nine `run_once_*` plus
 one `run_*` that fires every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
@@ -201,6 +202,18 @@ one `run_*` that fires every apply, called out below):
    are large and re-downloadable; backing them up wastes snapshots.
 9. **`050-sudo-touchid`** — enables Touch ID for `sudo` via
    `/etc/pam.d/sudo_local`. Survives macOS updates. **Needs sudo on first run.**
+10. **`060-chat-stack`** *(host-gated)* — stands up a tailnet-only, passkey-gated
+    chat frontend over the local Ollama daemon. Starts `ollama` via
+    `brew services`, brings up Open WebUI + Pocket-ID under `~/ai/chat` via
+    `docker compose`, and wires two `tailscale serve` HTTPS listeners
+    (`443` → Open WebUI, `8443` → Pocket-ID) using the machine's MagicDNS
+    cert. Requires OrbStack running and HTTPS Certificates enabled in the
+    tailnet (Admin → DNS). First-time admin setup is manual and prompted on
+    completion: enrol an admin passkey at `https://<mai>.<tailnet>.ts.net:8443/`,
+    mint an OIDC client for Open WebUI, paste the credentials into
+    `~/ai/chat/.env`, `docker compose up -d`. Invite friends by sharing the
+    `mai` node from the Tailscale admin and minting a Pocket-ID setup link.
+    No Cloudflare, no public DNS, no Funnel.
 
 After bootstrap you'll want a few one-time setup steps:
 

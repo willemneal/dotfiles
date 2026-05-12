@@ -77,6 +77,12 @@ The hostname must be set *before* `chezmoi apply` for these blocks to fire. `boo
 7. `040-macos-defaults` — Finder visibility, key repeat, screenshot dir, etc.
 8. `045-time-machine` *(host-gated)* — exclude `~/Models`, HF cache, uv cache, playground venv.
 9. `050-sudo-touchid` — Touch ID for sudo via `/etc/pam.d/sudo_local`.
+10. `060-chat-stack` *(host-gated)* — `brew services start ollama`, `docker compose up -d`
+    Open WebUI + Pocket-ID under `~/ai/chat/`, then `tailscale serve --https=443` (Open WebUI)
+    and `--https=8443` (Pocket-ID) with the MagicDNS cert. Two ports rather than path-routing
+    because Pocket-ID bakes `APP_URL` into its discovery doc and won't serve from a sub-path.
+    OIDC `client_id`/`secret` live in `~/ai/chat/.env` (manual after the first-run admin
+    enrols a passkey and creates the client). Tailnet-only: no Cloudflare, no public DNS.
 
 ## Secret handling
 
