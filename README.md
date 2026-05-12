@@ -123,14 +123,15 @@ fire on the next pass.
 ├── run_once_after_045-time-machine.sh.tmpl    exclude AI artifacts (AI hosts)
 ├── run_once_after_050-sudo-touchid.sh.tmpl    enable Touch ID for sudo
 ├── run_once_after_055-models-repo.sh.tmpl     git-init ~/Models + seed example (AI hosts)
-└── run_after_060-mai-model-serve.sh.tmpl      bootstrap+reload mai-model-serve LaunchAgent (every apply, AI hosts)
+├── run_after_060-mai-model-serve.sh.tmpl      bootstrap+reload mai-model-serve LaunchAgent (every apply, AI hosts)
+└── run_once_after_070-chat-stack.sh.tmpl      Open WebUI + Pocket-ID over tailnet (AI hosts)
 ```
 
 See `dot_config/alacritty/profiles/README.md` for how to add an SSH profile.
 
 ## macOS AI bootstrap
 
-On macOS, `chezmoi apply` runs eleven ordered scripts (nine `run_once_*` plus
+On macOS, `chezmoi apply` runs twelve ordered scripts (ten `run_once_*` plus
 two `run_*` that fire every apply, called out below):
 
 1. **`010-install-homebrew`** — installs Homebrew non-interactively if `brew`
@@ -225,6 +226,19 @@ two `run_*` that fire every apply, called out below):
     The agent runs `mai-model serve --bind 127.0.0.1 --port 7860` at
     login, restarts on crash (10s throttle), and logs to
     `~/Library/Logs/mai-model-serve.{out,err}.log`.
+12. **`070-chat-stack`** *(host-gated)* — stands up a tailnet-only, passkey-gated
+    chat frontend over the local Ollama daemon. Starts `ollama` via
+    `brew services`, brings up Open WebUI + Pocket-ID under `~/ai/chat` via
+    `docker compose`, and wires two `tailscale serve` HTTPS listeners
+    (`443` → Open WebUI, `8443` → Pocket-ID) using the machine's MagicDNS
+    cert. Requires OrbStack running and HTTPS Certificates enabled in the
+    tailnet (Admin → DNS). First-time admin setup is manual and prompted on
+    completion: enrol an admin passkey at `https://<mai>.<tailnet>.ts.net:8443/signup/setup`,
+    mint an OIDC client for Open WebUI with Allowed User Groups set to
+    `chat-users`, paste the credentials into `~/ai/chat/.env`, then
+    `docker compose up -d --force-recreate open-webui`. Invite friends by
+    sharing the `mai` node from the Tailscale admin and minting a
+    Pocket-ID one-time access link. No Cloudflare, no public DNS, no Funnel.
 
 After bootstrap you'll want a few one-time setup steps:
 

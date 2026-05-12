@@ -1,0 +1,231 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# Private friend-chat: Open WebUI → native Ollama, passkey auth via Pocket-ID,
+# tailnet-only via `tailscale serve`. No public DNS, no Cloudflare, no Funnel.
+#
+# Topology on `mai`:
+#   * Ollama (brew formula) listens on 127.0.0.1:11434
+#   * Pocket-ID (Docker) listens on 127.0.0.1:1411     ← passkey-only OIDC
+#   * Open WebUI (Docker) listens on 127.0.0.1:3000    ← chat frontend
+#   * `tailscale serve` terminates TLS with the MagicDNS cert and forwards:
+#       https://<fqdn>/         → 127.0.0.1:3000   (Open WebUI)
+#       https://<fqdn>:8443/    → 127.0.0.1:1411   (Pocket-ID)
+#   Two ports rather than path-routing because Pocket-ID expects to live at
+#   the URL root (its discovery doc and redirect_uri checks bake in APP_URL).
+#
+# Inviting a friend (after first apply + admin enrolment):
+#   1. Tailscale admin console → share the `mai` node to the friend's
+#      tailnet account. They install Tailscale.app and accept the share.
+#   2. https://<fqdn>:8443/ → Users → add by email → "Create one-time link",
+#      hand them the URL via 1Password. They enrol a passkey on first visit.
+#   3. They open https://<fqdn>/, click "Login with Pocket-ID", done.
+# No SSH keys, no shell access, no local macOS user, no inbound from public DNS.
+#
+# Idempotent: re-running rebuilds the compose file in place (content-hashed
+# heredocs trigger re-run on edit) and reapplies `tailscale serve` (which
+# replaces existing config for the same source). The OIDC client_id/secret
+# live in $CHAT_DIR/.env, populated by the admin after step 2 above;
+# subsequent re-applies preserve that file.
+set -euo pipefail
+
+CHAT_DIR="$HOME/ai/chat"
+COMPOSE_FILE="$CHAT_DIR/docker-compose.yml"
+ENV_FILE="$CHAT_DIR/.env"
+
+# ---- Pre-flight ----
+DOCKER=$(command -v docker || true)
+[ -z "$DOCKER" ] && [ -x /opt/homebrew/bin/docker ] && DOCKER=/opt/homebrew/bin/docker
+[ -z "$DOCKER" ] && [ -x /usr/local/bin/docker ] && DOCKER=/usr/local/bin/docker
+if [ -z "$DOCKER" ] || ! "$DOCKER" version >/dev/null 2>&1; then
+  echo "070-chat-stack: docker daemon not reachable — open OrbStack once and re-apply." >&2
+  exit 1
+fi
+
+if ! command -v ollama >/dev/null 2>&1; then
+  echo "070-chat-stack: ollama not on PATH — expected from Brewfile step 020." >&2
+  exit 1
+fi
+
+TS=$(command -v tailscale || true)
+[ -z "$TS" ] && [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] \
+  && TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+if [ -z "$TS" ]; then
+  echo "070-chat-stack: tailscale CLI missing — install Tailscale.app first." >&2
+  exit 1
+fi
+
+# Derive the machine's MagicDNS FQDN + tailnet IP. Requires HTTPS Certificates
+# enabled in the tailnet (Admin console → DNS → HTTPS Certificates). Without
+# it, `tailscale serve` later will fail loudly. The tailnet IP is also pinned
+# into the Open WebUI container's /etc/hosts (see compose `extra_hosts`
+# below) because `tailscale serve` listens only on the tailnet interface,
+# not on Docker's bridge — `host-gateway` would resolve to the bridge IP
+# and miss it. Routing to 100.x from inside an OrbStack container works
+# because OrbStack's VM shares the host's network stack including utun.
+SUFFIX=$("$TS" status --json 2>/dev/null | jq -r '.MagicDNSSuffix // empty')
+HOST=$("$TS" status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//' | cut -d. -f1)
+TAILNET_IP=$("$TS" ip -4 2>/dev/null | head -1)
+if [ -z "$SUFFIX" ] || [ -z "$HOST" ] || [ -z "$TAILNET_IP" ]; then
+  echo "070-chat-stack: couldn't read MagicDNS / tailnet IP from tailscale — is the daemon up and logged in?" >&2
+  exit 1
+fi
+FQDN="${HOST}.${SUFFIX}"
+
+# ---- 1. Native Ollama as a launchd service ----
+# `brew services start ollama` installs ~/Library/LaunchAgents/homebrew.mxcl.ollama.plist
+# (binds 127.0.0.1:11434 by default — never expose this directly). Idempotent.
+if ! brew services list 2>/dev/null | awk '$1=="ollama"{print $2}' | grep -qx started; then
+  echo "070-chat-stack: starting ollama via brew services"
+  brew services start ollama >/dev/null
+fi
+
+# ---- 2. ~/ai/chat layout ----
+mkdir -p "$CHAT_DIR"
+
+# .env holds three things, all read by docker compose at `up` time:
+#   - ENCRYPTION_KEY  : Pocket-ID data-at-rest key (encrypts stored passkey
+#                       credentials). Must be >=16 bytes; rotating it after
+#                       users enrol invalidates their credentials, so it's
+#                       generated once and left alone forever.
+#   - OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET : populated by the admin after
+#                       the first boot, when Pocket-ID mints the Open WebUI
+#                       client. Empty on first boot is fine — Open WebUI
+#                       just shows "Login with Pocket-ID" as broken until
+#                       the .env is filled and compose is re-upped.
+if [ ! -f "$ENV_FILE" ]; then
+  install -m 0600 /dev/null "$ENV_FILE"
+  {
+    printf '# Pocket-ID data-at-rest key. Generated once; never rotate after users enrol.\n'
+    printf 'ENCRYPTION_KEY=%s\n\n' "$(openssl rand -hex 24)"
+    printf '# Filled in after the Pocket-ID admin creates the "Open WebUI" OIDC client.\n'
+    printf '# After editing: (cd ~/ai/chat && docker compose up -d)\n'
+    printf 'OAUTH_CLIENT_ID=\n'
+    printf 'OAUTH_CLIENT_SECRET=\n'
+  } >> "$ENV_FILE"
+elif ! grep -q '^ENCRYPTION_KEY=' "$ENV_FILE"; then
+  # Migrate a .env written by an earlier version of this script that
+  # predates the ENCRYPTION_KEY requirement (Pocket-ID >=1.x).
+  printf '\n# Added on upgrade — required by Pocket-ID >=1.x.\nENCRYPTION_KEY=%s\n' \
+    "$(openssl rand -hex 24)" >> "$ENV_FILE"
+fi
+
+# ---- 3. docker-compose.yml ----
+# extra_hosts pins <fqdn> to mai's tailnet IP inside the Open WebUI container,
+# so server-side OIDC calls (discovery, token, userinfo) reach `tailscale
+# serve` on the tailnet interface. host-gateway would resolve to Docker's
+# bridge IP and miss the listener entirely. The tailnet IP is stable per
+# machine — Tailscale only re-issues on re-auth — so baking it into compose
+# at apply time is safe; re-running this script picks up any change.
+cat > "$COMPOSE_FILE" <<EOF
+# Generated by run_once_after_070-chat-stack.sh — edit there, not here.
+services:
+  pocket-id:
+    image: ghcr.io/pocket-id/pocket-id:latest
+    container_name: chat-pocket-id
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1411:1411"
+    environment:
+      APP_URL: https://${FQDN}:8443
+      TRUST_PROXY: "true"
+      ENCRYPTION_KEY: \${ENCRYPTION_KEY}
+    volumes:
+      - pocket-id-data:/app/backend/data
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: chat-open-webui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:8080"
+    env_file:
+      - .env
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      WEBUI_URL: https://${FQDN}
+      WEBUI_AUTH: "true"
+      ENABLE_SIGNUP: "false"
+      ENABLE_LOGIN_FORM: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
+      OAUTH_PROVIDER_NAME: Pocket-ID
+      OAUTH_SCOPES: "openid email profile"
+      OPENID_PROVIDER_URL: https://${FQDN}:8443/.well-known/openid-configuration
+      OPENID_REDIRECT_URI: https://${FQDN}/oauth/oidc/callback
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "${FQDN}:${TAILNET_IP}"
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      - pocket-id
+
+volumes:
+  pocket-id-data:
+  open-webui-data:
+EOF
+
+# ---- 4. Bring up the stack ----
+echo "070-chat-stack: docker compose up -d in $CHAT_DIR"
+(cd "$CHAT_DIR" && "$DOCKER" compose up -d)
+
+# ---- 5. tailscale serve: two HTTPS listeners on the MagicDNS cert ----
+# Replaces any existing config for the same --https port. If a prior `serve`
+# is already pointed at a different target, this overwrites it deliberately.
+echo "070-chat-stack: configuring tailscale serve (443 → Open WebUI, 8443 → Pocket-ID)"
+"$TS" serve --bg --https=443  http://127.0.0.1:3000 >/dev/null
+"$TS" serve --bg --https=8443 http://127.0.0.1:1411 >/dev/null
+
+# ---- 6. Onboarding hint ----
+cat <<EOF
+
+070-chat-stack: ready.
+
+First-time admin (only once, on first apply):
+  1. Open https://${FQDN}:8443/signup/setup  → enrol an admin passkey.
+     (The bare / route goes straight to the login form and asks for an
+     existing passkey — the setup wizard lives under /signup/setup.)
+  2. User Groups → create \`chat-users\`. Users → click yourself →
+     Groups → add \`chat-users\`.  (Pocket-ID's OIDC clients gate access
+     by group; without this you'll hit "You're not allowed to access this
+     service" 403 on first sign-in.)
+  3. OIDC Clients → "Add client" named "Open WebUI"
+       Callback URL:        https://${FQDN}/oauth/oidc/callback
+       Allowed User Groups: chat-users
+     Copy the generated Client ID + Client Secret.
+  4. Edit $ENV_FILE — paste OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET.
+  5. (cd $CHAT_DIR && docker compose up -d --force-recreate open-webui)
+     ^^^^^^^^^^^^^^^  plain \`up -d\` won't bump the recreate hash when env
+     vars go from empty to set; force-recreate guarantees the new .env
+     is read.
+  6. Open https://${FQDN}/  → "Login with Pocket-ID". The first OIDC sign-in
+     becomes the Open WebUI admin automatically.
+  7. ollama pull llama3.2  (or any other model — appears in the UI picker).
+
+Inviting a friend (each time):
+  - Tailscale admin → share the \`${HOST}\` node to their tailnet account.
+  - Pocket-ID admin → Users → "Add User" (email + username + first name).
+    Open the new user → Groups → tick \`chat-users\` → save.
+    Then on the user → "One-Time Access Link" → copy the URL.
+    Deliver the link via 1Password (single-use, expires).
+  - They install Tailscale, accept the share, open the link to enrol a
+    passkey, then visit https://${FQDN}/.
+
+Hardening notes:
+  - Pocket-ID's Settings → General already has signups disabled by default
+    (allowUserSignups=disabled), so the only path to an account is an
+    admin minting one. Don't flip this on.
+  - For defense-in-depth, you can additionally gate sign-in at the Open
+    WebUI layer by adding \`OAUTH_ROLES_CLAIM=groups\`,
+    \`OAUTH_ALLOWED_ROLES=chat-users\`, \`ENABLE_OAUTH_ROLE_MANAGEMENT=true\`
+    to $ENV_FILE and the \`groups\` scope to OAUTH_SCOPES — but this also
+    requires adding a custom \`groups\` claim to the Open WebUI OIDC
+    client in Pocket-ID, so it's an opt-in step. The Pocket-ID gate
+    above is the primary mechanism and is sufficient on its own.
+
+Privacy footprint:
+  - No Cloudflare. No public DNS. No Funnel.
+  - All traffic is end-to-end within your tailnet; TLS is a tailnet-issued cert.
+  - Models run locally on ${HOST} via Ollama — no prompts leave the machine.
+EOF
+{{ end -}}
