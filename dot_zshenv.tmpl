@@ -66,6 +66,65 @@ anthropic-login() {
   export ANTHROPIC_API_KEY
 }
 
+# Mint a Pocket-ID signup-token URL for the chat stack on `mai`. The
+# invitee opens the URL on their phone/laptop, enrols a passkey via
+# WebAuthn, and lands as a member of the scoped group — no per-user
+# admin work, no email round-trip. Defaults: 1 use, 7-day expiry, joins
+# `chat-users`. Expects the Pocket-ID admin API at 127.0.0.1:1411 (so
+# run this on `mai`) and the API key in 1Password ("Pocket-ID Admin
+# API", category API_CREDENTIAL — created via `op-creds-bootstrap`).
+chat-invite() {
+  emulate -L zsh
+  local uses=1 days=7 group=chat-users do_copy=false
+  while (( $# )); do
+    case "$1" in
+      -n|--uses)  uses=$2; shift 2 ;;
+      -d|--days)  days=$2; shift 2 ;;
+      --group)    group=$2; shift 2 ;;
+      --copy)     do_copy=true; shift ;;
+      -h|--help)
+        print -u2 "chat-invite [-n USES] [-d DAYS] [--group NAME] [--copy]"
+        print -u2 "  Mint a Pocket-ID signup-token URL. Default: 1 use, 7-day expiry, joins chat-users."
+        return 0 ;;
+      *) print -u2 "chat-invite: unknown arg '$1' (try --help)"; return 2 ;;
+    esac
+  done
+  for cmd in op jq curl tailscale; do
+    command -v "$cmd" >/dev/null || { print -u2 "$cmd not installed"; return 1; }
+  done
+
+  local api_key fqdn
+  api_key=$(op read "op://Personal/Pocket-ID Admin API/credential") || return $?
+  fqdn=$(tailscale status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//')
+  [[ -n "$fqdn" ]] || { print -u2 "chat-invite: couldn't read tailnet FQDN — is tailscaled up?"; return 1; }
+
+  local api="http://127.0.0.1:1411"
+  local share="https://${fqdn}:8443"
+  local group_id
+  group_id=$(curl -fsS -H "X-API-Key: $api_key" "$api/api/user-groups" \
+    | jq -r --arg n "$group" '.data[] | select(.name == $n) | .id')
+  [[ -n "$group_id" ]] || { print -u2 "chat-invite: group '$group' not found in Pocket-ID"; return 1; }
+
+  local expires
+  expires=$(date -u -v+${days}d +%Y-%m-%dT%H:%M:%SZ) || return $?
+
+  local resp token
+  resp=$(curl -fsS -H "X-API-Key: $api_key" -H 'Content-Type: application/json' \
+    -X POST "$api/api/signup-tokens" \
+    -d "{\"expiresAt\":\"$expires\",\"usageLimit\":$uses,\"userGroupIds\":[\"$group_id\"]}") || {
+    print -u2 "chat-invite: signup-token API call failed"; return 1
+  }
+  token=$(printf '%s' "$resp" | jq -r '.token // empty')
+  [[ -n "$token" ]] || { print -u2 "chat-invite: empty token in response: $resp"; return 1; }
+
+  local url="$share/st/$token"
+  print -u2 "  invite: group=$group  uses=$uses  expires=$expires"
+  print -- "$url"
+  if $do_copy; then
+    print -nr -- "$url" | pbcopy && print -u2 "  (copied to clipboard)"
+  fi
+}
+
 # Create an API Credential item in the Personal vault without exposing
 # the secret in argv or shell history. The secret reaches op via stdin
 # (kernel pipe — private to jq/op), never as a CLI flag.
