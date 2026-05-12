@@ -1,0 +1,108 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# Initialize ~/Models as its own git repo for per-model configs and notes.
+# Weights live in the HuggingFace cache (out of repo) — this repo only
+# tracks model.toml, notes.md, and run logs you choose to commit.
+set -euo pipefail
+
+MODELS="$HOME/Models"
+mkdir -p "$MODELS"
+
+if [ ! -d "$MODELS/.git" ]; then
+  git -C "$MODELS" init -q -b main
+  git -C "$MODELS" config commit.gpgsign false
+  echo "Models: initialized git repo at $MODELS"
+fi
+
+if [ ! -f "$MODELS/.gitignore" ]; then
+  cat > "$MODELS/.gitignore" <<'EOF'
+# Weights and large artifacts never get committed — they live in
+# ~/.cache/huggingface/hub and are reproducible from model.toml.
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.onnx
+
+# Per-model scratch
+**/scratch/
+**/.DS_Store
+
+# Bench logs are kept by default; uncomment to drop them:
+# **/runs/
+EOF
+fi
+
+if [ ! -f "$MODELS/README.md" ]; then
+  cat > "$MODELS/README.md" <<'EOF'
+# Models
+
+Per-model configs and notes for local open-source models.
+
+Each subdirectory is one model:
+
+    <name>/
+      model.toml      # HF repo, runner, generation params
+      notes.md        # why you care, best prompts, weaknesses
+      runs/           # bench logs
+
+Weights are *not* stored here — they live in `~/.cache/huggingface/hub`
+and are pulled on demand by `mai-model pull <name>`.
+
+## Workflow
+
+    mai-model list                                    # see what's configured
+    mai-model new qwen2.5-coder mlx-community/Qwen2.5-Coder-32B-Instruct-4bit
+    mai-model pull qwen2.5-coder                      # download to HF cache
+    mai-model run  qwen2.5-coder "explain bitcasting"
+    mai-model bench qwen2.5-coder                     # logs to runs/
+
+See `mai-model --help` for the full surface.
+EOF
+fi
+
+# Seed one worked example so `mai-model list` isn't empty on first apply.
+EXAMPLE="$MODELS/llama-3.3-70b"
+if [ ! -e "$EXAMPLE" ]; then
+  mkdir -p "$EXAMPLE/runs"
+  cat > "$EXAMPLE/model.toml" <<'EOF'
+# Llama 3.3 70B — Meta's strongest small-ish open model, 4-bit MLX quant.
+# https://huggingface.co/mlx-community/Llama-3.3-70B-Instruct-4bit
+name    = "llama-3.3-70b"
+hf_repo = "mlx-community/Llama-3.3-70B-Instruct-4bit"
+runner  = "mlx-lm"
+context = 8192
+notes   = "Reference 70B-class model. ~40GB on disk. Needs raised iogpu.wired_limit."
+
+[generate]
+max_tokens  = 512
+temperature = 0.7
+EOF
+  cat > "$EXAMPLE/notes.md" <<'EOF'
+# llama-3.3-70b
+
+HF: https://huggingface.co/mlx-community/Llama-3.3-70B-Instruct-4bit
+
+## Why this model
+
+The reference 70B-class open model on Apple Silicon. Use it as a baseline
+to compare against smaller specialist models (Qwen2.5-Coder, etc.).
+
+## Best prompts
+
+## Known weaknesses
+
+- ~40 GB weights, ~50 GB resident — needs `iogpu.wired_limit_mb` raised
+  (handled by `run_once_after_035-iogpu-limit`).
+EOF
+  echo "Models: seeded example $EXAMPLE"
+fi
+
+cat <<EOF
+
+Models repo ready.
+  Dir:    $MODELS
+  CLI:    mai-model --help
+  Status: $(git -C "$MODELS" status --porcelain 2>/dev/null | wc -l | tr -d ' ') untracked/changed files
+EOF
+{{ end -}}

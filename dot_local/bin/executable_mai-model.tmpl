@@ -1,0 +1,286 @@
+{{- if and (eq .chezmoi.os "darwin") (has .chezmoi.hostname .hosts.ai_machines) -}}
+#!/usr/bin/env bash
+# mai-model — manage and run local open-source models declaratively.
+#
+# Each model lives at ~/Models/<name>/ with a model.toml describing the HF
+# repo, runner (mlx-lm | ollama | llama.cpp), and generation params. Weights
+# stay in the HuggingFace cache (~/.cache/huggingface/hub) — the per-model
+# folder owns metadata, notes, and run logs only.
+set -uo pipefail
+
+MODELS_DIR="${MAI_MODELS_DIR:-$HOME/Models}"
+PLAYGROUND="${MAI_PLAYGROUND:-$HOME/ai/playground}"
+PYTHON="${MAI_MODEL_PYTHON:-$PLAYGROUND/.venv/bin/python}"
+HELPER="${MAI_MODEL_HELPER:-$HOME/.local/share/mai-model/helper.py}"
+
+die()  { printf "mai-model: %s\n" "$*" >&2; exit 1; }
+warn() { printf "mai-model: %s\n" "$*" >&2; }
+
+require_python() {
+  [ -x "$PYTHON" ] || die "playground venv missing at $PYTHON — run \`chezmoi apply\` first"
+}
+
+# toml_get FILE KEY — supports dotted keys (e.g. generate.max_tokens).
+# Prints empty string when key is absent; never errors on missing keys.
+toml_get() {
+  require_python
+  "$PYTHON" - "$1" "$2" <<'PY'
+import sys, tomllib, pathlib
+try:
+    data = tomllib.loads(pathlib.Path(sys.argv[1]).read_text())
+except (FileNotFoundError, tomllib.TOMLDecodeError) as e:
+    print("", end="")
+    sys.exit(0)
+v = data
+for k in sys.argv[2].split("."):
+    if isinstance(v, dict) and k in v:
+        v = v[k]
+    else:
+        v = ""
+        break
+if isinstance(v, list):
+    print(" ".join(map(str, v)))
+elif isinstance(v, bool):
+    print("true" if v else "false")
+else:
+    print(v)
+PY
+}
+
+model_path() { printf "%s/%s" "$MODELS_DIR" "$1"; }
+model_toml() { printf "%s/%s/model.toml" "$MODELS_DIR" "$1"; }
+
+ensure_model() {
+  local name="$1"
+  [ -n "$name" ] || die "missing model name"
+  [ -f "$(model_toml "$name")" ] || die "no such model: $name (expected $(model_toml "$name"))"
+}
+
+# ---- subcommands ----------------------------------------------------------
+
+cmd_list() {
+  if [ ! -d "$MODELS_DIR" ]; then
+    warn "no models directory at $MODELS_DIR"
+    return 0
+  fi
+  local any=0
+  shopt -s nullglob
+  for toml in "$MODELS_DIR"/*/model.toml; do
+    any=1
+    local name runner repo
+    name=$(basename "$(dirname "$toml")")
+    runner=$(toml_get "$toml" runner)
+    repo=$(toml_get "$toml" hf_repo)
+    [ -n "$runner" ] || runner="mlx-lm"
+    printf "%-28s  %-10s  %s\n" "$name" "$runner" "${repo:-(no hf_repo)}"
+  done
+  [ "$any" = 0 ] && warn "no models found under $MODELS_DIR — try \`mai-model new <name> <hf-repo>\`"
+}
+
+cmd_new() {
+  local name="${1:-}" repo="${2:-}" runner="${3:-mlx-lm}"
+  if [ -z "$name" ] || [ -z "$repo" ]; then
+    die "usage: mai-model new <name> <hf-repo> [runner]"
+  fi
+  local dir; dir=$(model_path "$name")
+  [ -e "$dir" ] && die "$dir already exists"
+  mkdir -p "$dir/runs"
+  cat > "$dir/model.toml" <<EOF
+# $name — see https://huggingface.co/$repo
+name    = "$name"
+hf_repo = "$repo"
+runner  = "$runner"
+# context = 8192
+# notes   = "Short description of why you care about this model."
+
+[generate]
+max_tokens  = 512
+temperature = 0.7
+EOF
+  cat > "$dir/notes.md" <<EOF
+# $name
+
+HF: https://huggingface.co/$repo
+
+## Why this model
+
+(your notes here)
+
+## Best prompts
+
+## Known weaknesses
+EOF
+  printf "created %s\n" "$dir"
+}
+
+cmd_pull() {
+  local name="${1:-}"
+  ensure_model "$name"
+  local toml runner repo
+  toml=$(model_toml "$name")
+  runner=$(toml_get "$toml" runner)
+  repo=$(toml_get "$toml" hf_repo)
+  [ -n "$repo" ] || die "$toml: missing hf_repo"
+  case "$runner" in
+    ""|mlx-lm|llama.cpp)
+      command -v hf >/dev/null 2>&1 || die "hf CLI not on PATH — install via \`uv pip install huggingface-hub\` in the playground"
+      printf "pulling %s into HF cache...\n" "$repo"
+      hf download "$repo"
+      ;;
+    ollama)
+      local oname; oname=$(toml_get "$toml" ollama_model)
+      [ -n "$oname" ] || die "$toml: runner=ollama requires ollama_model"
+      command -v ollama >/dev/null 2>&1 || die "ollama not installed"
+      ollama pull "$oname"
+      ;;
+    *) die "unknown runner: $runner" ;;
+  esac
+}
+
+cmd_run() {
+  local name="${1:-}"; shift || true
+  ensure_model "$name"
+  local toml runner repo max temp prompt
+  toml=$(model_toml "$name")
+  runner=$(toml_get "$toml" runner); runner=${runner:-mlx-lm}
+  repo=$(toml_get "$toml" hf_repo)
+  max=$(toml_get "$toml" generate.max_tokens); max=${max:-512}
+  temp=$(toml_get "$toml" generate.temperature); temp=${temp:-0.7}
+
+  if [ "$#" -gt 0 ]; then
+    prompt="$*"
+  elif [ ! -t 0 ]; then
+    prompt=$(cat)
+  else
+    die "usage: mai-model run <name> <prompt>   (or pipe via stdin)"
+  fi
+
+  case "$runner" in
+    mlx-lm)
+      [ -n "$repo" ] || die "$toml: missing hf_repo"
+      require_python
+      ( cd "$PLAYGROUND" && uv run --no-sync mlx_lm.generate \
+          --model "$repo" \
+          --max-tokens "$max" \
+          --temp "$temp" \
+          --prompt "$prompt" )
+      ;;
+    ollama)
+      local oname; oname=$(toml_get "$toml" ollama_model)
+      [ -n "$oname" ] || die "$toml: runner=ollama requires ollama_model"
+      printf "%s" "$prompt" | ollama run "$oname"
+      ;;
+    llama.cpp)
+      local gguf; gguf=$(toml_get "$toml" gguf_file)
+      if [ -z "$repo" ] || [ -z "$gguf" ]; then
+        die "$toml: runner=llama.cpp requires hf_repo + gguf_file"
+      fi
+      command -v llama-cli >/dev/null 2>&1 || die "llama-cli not installed (brew install llama.cpp)"
+      llama-cli -hf "$repo:$gguf" -n "$max" --temp "$temp" -p "$prompt"
+      ;;
+    *) die "unknown runner: $runner" ;;
+  esac
+}
+
+cmd_bench() {
+  local name="${1:-}"
+  ensure_model "$name"
+  local dir; dir=$(model_path "$name")
+  mkdir -p "$dir/runs"
+  local stamp log
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  log="$dir/runs/bench-$stamp.log"
+  local prompt="Write a haiku about an Apple Silicon GPU."
+  {
+    printf "# bench %s  model=%s\n" "$stamp" "$name"
+    printf "# prompt: %s\n\n" "$prompt"
+    /usr/bin/time -lp env MAI_MODEL_PYTHON="$PYTHON" "$0" run "$name" "$prompt" 2>&1
+  } | tee "$log"
+  printf "\nlogged to %s\n" "$log"
+}
+
+cmd_run_all() {
+  require_python
+  [ -f "$HELPER" ] || die "helper missing at $HELPER — run \`chezmoi apply\` first"
+  exec env MAI_MODELS_DIR="$MODELS_DIR" "$PYTHON" "$HELPER" run-all "$@"
+}
+
+cmd_serve() {
+  require_python
+  [ -f "$HELPER" ] || die "helper missing at $HELPER — run \`chezmoi apply\` first"
+  exec env MAI_MODELS_DIR="$MODELS_DIR" "$PYTHON" "$HELPER" serve "$@"
+}
+
+cmd_info() {
+  local name="${1:-}"
+  ensure_model "$name"
+  local dir toml
+  dir=$(model_path "$name"); toml=$(model_toml "$name")
+  printf "==> %s\n" "$toml"
+  cat "$toml"
+  printf "\n==> disk\n"
+  du -sh "$dir" 2>/dev/null | awk '{printf "  folder: %s\n", $1}'
+  local repo; repo=$(toml_get "$toml" hf_repo)
+  if [ -n "$repo" ]; then
+    local cache_dir="$HOME/.cache/huggingface/hub/models--${repo//\//--}"
+    if [ -d "$cache_dir" ]; then
+      du -sh "$cache_dir" 2>/dev/null | awk '{printf "  weights (HF cache): %s\n", $1}'
+    else
+      printf "  weights (HF cache): not downloaded\n"
+    fi
+  fi
+  # Bench filenames are ISO-8601 timestamps, so lexical sort == newest-first.
+  local last; last=$(find "$dir/runs" -maxdepth 1 -name 'bench-*.log' -type f 2>/dev/null | sort -r | head -1)
+  [ -n "$last" ] && printf "\n==> last bench: %s\n" "$last"
+}
+
+usage() {
+  cat <<EOF
+mai-model — manage local open-source models declaratively.
+
+Usage:
+  mai-model list                          list configured models
+  mai-model new   <name> <hf-repo> [run]  scaffold ~/Models/<name>/ (runner defaults to mlx-lm)
+  mai-model pull  <name>                  download weights for <name>
+  mai-model run     <name> <prompt...>    generate (reads stdin if no prompt args)
+  mai-model run-all <prompt...>           run the prompt against every configured model
+  mai-model bench   <name>                run a fixed prompt and log to runs/
+  mai-model serve   [--port N]            HTTP viewer for run-all sets (default :7860)
+  mai-model info    <name>                show TOML + disk usage + last bench
+
+Layout:
+  Per-model dir:  $MODELS_DIR/<name>/
+  Config file:    $MODELS_DIR/<name>/model.toml
+  Run logs:       $MODELS_DIR/<name>/runs/
+  Weights:        \$HF_HOME (\$HOME/.cache/huggingface/hub by default)
+
+Runners:
+  mlx-lm     — Apple Silicon fast path; needs an mlx-community repo
+  ollama     — uses \`ollama_model\` from TOML
+  llama.cpp  — uses \`hf_repo\` + \`gguf_file\` from TOML
+
+Env:
+  MAI_MODELS_DIR    override ~/Models
+  MAI_PLAYGROUND    override ~/ai/playground
+  MAI_MODEL_PYTHON  override the Python used for TOML parsing
+EOF
+}
+
+main() {
+  local cmd="${1:-}"; shift || true
+  case "$cmd" in
+    list|ls)        cmd_list "$@" ;;
+    new|init)       cmd_new "$@" ;;
+    pull|download)  cmd_pull "$@" ;;
+    run|generate)   cmd_run "$@" ;;
+    run-all|all)    cmd_run_all "$@" ;;
+    bench)          cmd_bench "$@" ;;
+    serve|view)     cmd_serve "$@" ;;
+    info|show)      cmd_info "$@" ;;
+    ""|-h|--help|help) usage ;;
+    *)              usage; exit 2 ;;
+  esac
+}
+
+main "$@"
+{{ end -}}
