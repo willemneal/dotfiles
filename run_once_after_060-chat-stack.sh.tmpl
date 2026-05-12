@@ -185,23 +185,43 @@ First-time admin (only once, on first apply):
   1. Open https://${FQDN}:8443/signup/setup  → enrol an admin passkey.
      (The bare / route goes straight to the login form and asks for an
      existing passkey — the setup wizard lives under /signup/setup.)
-  2. OIDC Clients → "Add client" named "Open WebUI"
-       Callback URL: https://${FQDN}/oauth/oidc/callback
+  2. User Groups → create \`chat-users\`. Users → click yourself →
+     Groups → add \`chat-users\`.  (Pocket-ID's OIDC clients gate access
+     by group; without this you'll hit "You're not allowed to access this
+     service" 403 on first sign-in.)
+  3. OIDC Clients → "Add client" named "Open WebUI"
+       Callback URL:        https://${FQDN}/oauth/oidc/callback
+       Allowed User Groups: chat-users
      Copy the generated Client ID + Client Secret.
-  3. Edit $ENV_FILE — paste OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET.
-  4. (cd $CHAT_DIR && docker compose up -d --force-recreate open-webui)
+  4. Edit $ENV_FILE — paste OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET.
+  5. (cd $CHAT_DIR && docker compose up -d --force-recreate open-webui)
      ^^^^^^^^^^^^^^^  plain \`up -d\` won't bump the recreate hash when env
      vars go from empty to set; force-recreate guarantees the new .env
      is read.
-  5. Open https://${FQDN}/  → "Login with Pocket-ID". The first OIDC sign-in
+  6. Open https://${FQDN}/  → "Login with Pocket-ID". The first OIDC sign-in
      becomes the Open WebUI admin automatically.
-  6. ollama pull llama3.2  (or any other model — appears in the UI picker).
+  7. ollama pull llama3.2  (or any other model — appears in the UI picker).
 
 Inviting a friend (each time):
   - Tailscale admin → share the \`${HOST}\` node to their tailnet account.
-  - Pocket-ID admin → Users → add by email → mint a one-time setup link,
-    deliver via 1Password.
-  - They install Tailscale, accept the share, visit https://${FQDN}/.
+  - Pocket-ID admin → Users → "Add User" (email + username + first name).
+    Open the new user → Groups → tick \`chat-users\` → save.
+    Then on the user → "One-Time Access Link" → copy the URL.
+    Deliver the link via 1Password (single-use, expires).
+  - They install Tailscale, accept the share, open the link to enrol a
+    passkey, then visit https://${FQDN}/.
+
+Hardening notes:
+  - Pocket-ID's Settings → General already has signups disabled by default
+    (allowUserSignups=disabled), so the only path to an account is an
+    admin minting one. Don't flip this on.
+  - For defense-in-depth, you can additionally gate sign-in at the Open
+    WebUI layer by adding \`OAUTH_ROLES_CLAIM=groups\`,
+    \`OAUTH_ALLOWED_ROLES=chat-users\`, \`ENABLE_OAUTH_ROLE_MANAGEMENT=true\`
+    to $ENV_FILE and the \`groups\` scope to OAUTH_SCOPES — but this also
+    requires adding a custom \`groups\` claim to the Open WebUI OIDC
+    client in Pocket-ID, so it's an opt-in step. The Pocket-ID gate
+    above is the primary mechanism and is sufficient on its own.
 
 Privacy footprint:
   - No Cloudflare. No public DNS. No Funnel.
