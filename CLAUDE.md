@@ -100,7 +100,7 @@ TOML parsing is done via the playground venv's Python 3.12 `tomllib` (`$HOME/ai/
 Never inline secrets in templates. Two patterns are in use:
 
 - **`op://` references** read at runtime by `*-login` zsh functions in `dot_zshenv.tmpl` (`hf-login`, `gh-login`, `tailscale-up`, `openrouter-login`). The functions export the env var only when invoked — nothing runs at shell startup.
-- **`op-cred <title>` / `op-creds-bootstrap`** create credentials in 1Password without exposing them in argv. Secret transits via stdin pipe through `jq -Rn ... | op item create --template -` — kernel pipe, never visible in `ps`. The credential inventory lives at `dot_config/op-creds` (one item title per line, `#` comments). **Adding a credential is a one-line config edit, not a code edit** — do not edit the function.
+- **`op-cred <title>` / `op-creds-bootstrap`** create credentials in 1Password without exposing them in argv. Secret transits via stdin pipe through `jq -Rn ... | op item create -` — kernel pipe, never visible in `ps`. The credential inventory lives at `dot_config/op-creds` (one item title per line, `#` comments). **Adding a credential is a one-line config edit, not a code edit** — do not edit the function.
 
 Defense-in-depth: `dot_config/atuin/config.toml` has a `history_filter` regex list that drops common secret-leaking patterns (op/login/--token=/--password=/api_key/HF_TOKEN/TS_AUTHKEY) before they hit the SQLite history.
 

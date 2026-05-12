@@ -81,7 +81,7 @@ op-cred() {
     category: "API_CREDENTIAL",
     vault: { name: "Personal" },
     fields: [ { id: "credential", type: "CONCEALED", value: input } ]
-  }' | op item create --template - >/dev/null \
+  }' | op item create - >/dev/null \
     && print "✓ $1 created" || print -u2 "✗ $1 failed"
   unset REPLY
 }
