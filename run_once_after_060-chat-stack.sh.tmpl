@@ -189,7 +189,10 @@ First-time admin (only once, on first apply):
        Callback URL: https://${FQDN}/oauth/oidc/callback
      Copy the generated Client ID + Client Secret.
   3. Edit $ENV_FILE — paste OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET.
-  4. (cd $CHAT_DIR && docker compose up -d)
+  4. (cd $CHAT_DIR && docker compose up -d --force-recreate open-webui)
+     ^^^^^^^^^^^^^^^  plain \`up -d\` won't bump the recreate hash when env
+     vars go from empty to set; force-recreate guarantees the new .env
+     is read.
   5. Open https://${FQDN}/  → "Login with Pocket-ID". The first OIDC sign-in
      becomes the Open WebUI admin automatically.
   6. ollama pull llama3.2  (or any other model — appears in the UI picker).
