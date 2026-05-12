@@ -156,6 +156,88 @@ else
   warn "sudo Touch ID: not configured (run_once_after_050)"
 fi
 
+# 060-chat-stack (AI-host gated; the whole section warn-skips cleanly if
+# the script hasn't run on this machine, so non-AI hosts stay quiet).
+CHAT_DIR="$HOME/ai/chat"
+COMPOSE_FILE="$CHAT_DIR/docker-compose.yml"
+if [ -f "$COMPOSE_FILE" ]; then
+  section "Chat stack (060)"
+
+  DOCKER=$(command -v docker || true)
+  [ -z "$DOCKER" ] && [ -x /opt/homebrew/bin/docker ] && DOCKER=/opt/homebrew/bin/docker
+  [ -z "$DOCKER" ] && [ -x /usr/local/bin/docker ] && DOCKER=/usr/local/bin/docker
+
+  if [ -z "$DOCKER" ] || ! "$DOCKER" version >/dev/null 2>&1; then
+    warn "docker daemon not reachable — open OrbStack to inspect chat stack"
+  else
+    # Parse via `jq` rather than docker's --format option, because the
+    # Go-template syntax docker uses there collides with chezmoi's own
+    # template processing of this file.
+    for ctr in chat-pocket-id chat-open-webui; do
+      raw=$("$DOCKER" inspect "$ctr" 2>/dev/null | jq -r '.[0] | (.State.Status) + "|" + (.State.Health.Status // "-")' 2>/dev/null || true)
+      if [ -z "$raw" ] || [ "$raw" = "null|-" ]; then
+        miss "$ctr: not created (re-run 060)"
+        continue
+      fi
+      state=${raw%%|*}; health=${raw##*|}
+      case "$state:$health" in
+        running:healthy|running:-) ok "$ctr: $state${health:+ ($health)}";;
+        running:*)                 warn "$ctr: $state ($health)";;
+        *)                         miss "$ctr: $state${health:+ ($health)}";;
+      esac
+    done
+  fi
+
+  # .env: presence-only checks, never print values (OAUTH_CLIENT_SECRET +
+  # ENCRYPTION_KEY are secrets that would otherwise end up in any
+  # transcript / clipboard the user pipes mai-doctor through).
+  ENV_FILE="$CHAT_DIR/.env"
+  if [ ! -f "$ENV_FILE" ]; then
+    miss "$ENV_FILE missing (re-run 060)"
+  else
+    if grep -qE '^ENCRYPTION_KEY=.+' "$ENV_FILE"; then
+      ok "ENCRYPTION_KEY: set"
+    else
+      miss "ENCRYPTION_KEY: missing — Pocket-ID won't start without it"
+    fi
+    if grep -qE '^OAUTH_CLIENT_ID=.+' "$ENV_FILE"; then
+      ok "OAUTH_CLIENT_ID: set"
+    else
+      warn "OAUTH_CLIENT_ID: empty — mint an OIDC client in Pocket-ID and paste it"
+    fi
+  fi
+
+  # Tailnet IP drift: tailscale ip is stable per machine but re-auth can
+  # change it. The Open WebUI container's /etc/hosts entry in compose
+  # would then point at a dead IP, breaking server-side OIDC. Compare
+  # what compose has against what tailscaled reports now.
+  if command -v tailscale >/dev/null 2>&1; then
+    current_ip=$(tailscale ip -4 2>/dev/null | head -1)
+    compose_ip=$(grep -oE 'ts\.net:[0-9]+(\.[0-9]+){3}' "$COMPOSE_FILE" | head -1 | cut -d: -f2)
+    if [ -n "$current_ip" ] && [ -n "$compose_ip" ]; then
+      if [ "$current_ip" = "$compose_ip" ]; then
+        ok "tailnet IP in compose: $compose_ip"
+      else
+        warn "tailnet IP drift: compose=$compose_ip vs current=$current_ip (re-run 060)"
+      fi
+    fi
+
+    # tailscale serve: check by the upstream target since `:443` doesn't
+    # appear in `serve status` output (it's the default port).
+    serve=$(tailscale serve status 2>/dev/null || true)
+    if printf '%s' "$serve" | grep -q '127\.0\.0\.1:3000'; then
+      ok "tailscale serve → Open WebUI (port 3000)"
+    else
+      warn "tailscale serve → 127.0.0.1:3000 not configured (re-run 060)"
+    fi
+    if printf '%s' "$serve" | grep -q '127\.0\.0\.1:1411'; then
+      ok "tailscale serve → Pocket-ID (port 1411)"
+    else
+      warn "tailscale serve → 127.0.0.1:1411 not configured (re-run 060)"
+    fi
+  fi
+fi
+
 if [ "$issues" -eq 0 ]; then
   printf "\n\033[32mOK\033[0m\n"
 else
