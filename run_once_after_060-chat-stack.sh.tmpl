@@ -182,7 +182,9 @@ cat <<EOF
 060-chat-stack: ready.
 
 First-time admin (only once, on first apply):
-  1. Open https://${FQDN}:8443/  → enrol an admin passkey (Pocket-ID setup wizard).
+  1. Open https://${FQDN}:8443/signup/setup  → enrol an admin passkey.
+     (The bare / route goes straight to the login form and asks for an
+     existing passkey — the setup wizard lives under /signup/setup.)
   2. OIDC Clients → "Add client" named "Open WebUI"
        Callback URL: https://${FQDN}/oauth/oidc/callback
      Copy the generated Client ID + Client Secret.
