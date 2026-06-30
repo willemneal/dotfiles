@@ -156,7 +156,7 @@ two `run_*` that fire every apply, called out below):
      icon window previews), xykong/tap/flux-markdown (Markdown QuickLook).
    - Browsers: zen (Gecko-based, Firefox fork).
    - Communication: slack, discord, zoom, signal, telegram.
-   - Media: vlc, iina, obs, handbrake, audacity.
+   - Media: vlc, iina, obs, snapzy, handbrake, audacity.
    - Creative / GPU: blender, godot, epic-games (Epic launcher → Unreal),
      draw-things (local Stable Diffusion / Flux on MLX), upscayl
      (Real-ESRGAN image upscaler).
