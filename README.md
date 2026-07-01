@@ -116,6 +116,7 @@ fire on the next pass.
 ├── run_once_before_010-install-homebrew.sh.tmpl
 ├── run_once_after_020-brew-bundle.sh.tmpl
 ├── run_after_022-fpath-perms.sh.tmpl          chmod g-w,o-w on Homebrew share dir (every apply)
+├── run_after_023-mise-install.sh.tmpl         mise install pinned runtimes (every apply)
 ├── run_once_after_025-typewhisper.sh.tmpl     install TypeWhisper from GitHub DMG
 ├── run_once_after_030-ai-stack.sh.tmpl         uv + MLX playground (AI hosts)
 ├── run_once_after_035-iogpu-limit.sh.tmpl      LaunchDaemon: persist iogpu.wired_limit_mb
@@ -917,6 +918,12 @@ go = "latest"
 bun = "latest"
 deno = "latest"
 ```
+
+The `lts`/`latest` pins roll, so the installed versions track upstream. On
+every `chezmoi apply`, `run_after_023-mise-install` runs `mise install` to
+reify these pins — without it a fresh apply (or an `lts` bump, e.g. node 22 →
+24) leaves `mise activate` warning `missing: node@X` on every shell start. It's
+a fast no-op once each pinned version is already present.
 
 Python is *deliberately not* under mise — it's owned by `uv` per-project
 (see `~/ai/playground/pyproject.toml`). Rust is owned by `rustup`. Mise

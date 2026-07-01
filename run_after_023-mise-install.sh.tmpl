@@ -1,0 +1,22 @@
+{{- if eq .chezmoi.os "darwin" -}}
+#!/usr/bin/env bash
+# Materialize the runtimes pinned in ~/.config/mise/config.toml (node/go/bun/
+# deno). Nothing else in the repo runs `mise install`, so a fresh apply — or a
+# rolling `lts`/`latest` pin that moved (e.g. node lts 22 -> 24) — leaves mise
+# warning "missing: node@X" on every shell start via `mise activate` in .zshrc.
+# Runs every apply (not run_once_) so pin drift self-heals; it's a fast no-op
+# once every pinned version is already installed. Best-effort: a single failed
+# download (deno mirror hiccup, etc.) shouldn't abort the rest of the apply.
+set -euo pipefail
+
+{{ template "brew-shellenv.sh" . -}}
+
+command -v mise >/dev/null || { echo "[mise-install] mise not on PATH; skipping (brew bundle may have failed)." >&2; exit 0; }
+
+# Install from the global config; run from $HOME so no stray project mise.toml
+# in chezmoi's cwd shadows it.
+cd "$HOME"
+if ! mise install; then
+  echo "[mise-install] One or more tools failed to install. Re-run: mise install" >&2
+fi
+{{ end -}}
