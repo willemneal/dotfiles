@@ -159,7 +159,9 @@ two `run_*` that fire every apply, called out below):
    - Media: vlc, iina, obs, snapzy, handbrake, audacity.
    - Creative / GPU: blender, godot, epic-games (Epic launcher → Unreal),
      draw-things (local Stable Diffusion / Flux on MLX), upscayl
-     (Real-ESRGAN image upscaler).
+     (Real-ESRGAN image upscaler), chainner (node-based AI
+     upscaling — video capable), fx-upscale (MetalFX video
+     upscaler CLI).
    - Games / Windows compat: steam, nvidia-geforce-now, crossover.
    - Security / wallets: yubico-authenticator, ledger-live, protonvpn.
    - Mac App Store (via `mas`): Flighty. Installed in a **second pass**
