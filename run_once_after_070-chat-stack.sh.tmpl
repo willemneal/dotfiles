@@ -82,31 +82,48 @@ fi
 # ---- 2. ~/ai/chat layout ----
 mkdir -p "$CHAT_DIR"
 
-# .env holds three things, all read by docker compose at `up` time:
-#   - ENCRYPTION_KEY  : Pocket-ID data-at-rest key (encrypts stored passkey
-#                       credentials). Must be >=16 bytes; rotating it after
-#                       users enrol invalidates their credentials, so it's
-#                       generated once and left alone forever.
+# .env holds four things, all read by docker compose at `up` time:
+#   - ENCRYPTION_KEY              : Pocket-ID data-at-rest key (encrypts
+#                                   stored passkey credentials). Must be
+#                                   >=16 bytes; rotating after users enrol
+#                                   invalidates their credentials, so it's
+#                                   generated once and left alone forever.
 #   - OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET : populated by the admin after
-#                       the first boot, when Pocket-ID mints the Open WebUI
-#                       client. Empty on first boot is fine — Open WebUI
-#                       just shows "Login with Pocket-ID" as broken until
-#                       the .env is filled and compose is re-upped.
+#                                   the first boot, when Pocket-ID mints
+#                                   the Open WebUI client. Empty on first
+#                                   boot is fine — Open WebUI just shows
+#                                   "Login with Pocket-ID" as broken until
+#                                   the .env is filled and compose re-upped.
+#   - BYPASS_MODEL_ACCESS_CONTROL : Open WebUI's default ACL hides every
+#                                   newly-pulled model from non-admin
+#                                   users until the admin manually flips
+#                                   each to public. Pocket-ID's chat-users
+#                                   group is already the access gate, so
+#                                   we bypass the second per-model layer.
 if [ ! -f "$ENV_FILE" ]; then
   install -m 0600 /dev/null "$ENV_FILE"
   {
     printf '# Pocket-ID data-at-rest key. Generated once; never rotate after users enrol.\n'
     printf 'ENCRYPTION_KEY=%s\n\n' "$(openssl rand -hex 24)"
     printf '# Filled in after the Pocket-ID admin creates the "Open WebUI" OIDC client.\n'
-    printf '# After editing: (cd ~/ai/chat && docker compose up -d)\n'
+    printf '# After editing: (cd ~/ai/chat && docker compose up -d --force-recreate open-webui)\n'
     printf 'OAUTH_CLIENT_ID=\n'
-    printf 'OAUTH_CLIENT_SECRET=\n'
+    printf 'OAUTH_CLIENT_SECRET=\n\n'
+    printf '# Newly-pulled Ollama models default to admin-only otherwise — invitees\n'
+    printf '# would log in to an empty model picker. Pocket-ID gates access at the\n'
+    printf '# group level already; the per-model layer here is just noise.\n'
+    printf 'BYPASS_MODEL_ACCESS_CONTROL=true\n'
   } >> "$ENV_FILE"
-elif ! grep -q '^ENCRYPTION_KEY=' "$ENV_FILE"; then
-  # Migrate a .env written by an earlier version of this script that
-  # predates the ENCRYPTION_KEY requirement (Pocket-ID >=1.x).
-  printf '\n# Added on upgrade — required by Pocket-ID >=1.x.\nENCRYPTION_KEY=%s\n' \
-    "$(openssl rand -hex 24)" >> "$ENV_FILE"
+else
+  # Migrate .env files written by earlier versions of this script.
+  if ! grep -q '^ENCRYPTION_KEY=' "$ENV_FILE"; then
+    printf '\n# Added on upgrade — required by Pocket-ID >=1.x.\nENCRYPTION_KEY=%s\n' \
+      "$(openssl rand -hex 24)" >> "$ENV_FILE"
+  fi
+  if ! grep -q '^BYPASS_MODEL_ACCESS_CONTROL=' "$ENV_FILE"; then
+    printf '\n# Added on upgrade — see comment block in this script for rationale.\nBYPASS_MODEL_ACCESS_CONTROL=true\n' \
+      >> "$ENV_FILE"
+  fi
 fi
 
 # ---- 3. docker-compose.yml ----
@@ -204,10 +221,13 @@ First-time admin (only once, on first apply):
 
 Inviting a friend (each time):
   - Tailscale admin → share the \`${HOST}\` node to their tailnet account.
-  - Pocket-ID admin → Users → "Add User" (email + username + first name).
-    Open the new user → Groups → tick \`chat-users\` → save.
-    Then on the user → "One-Time Access Link" → copy the URL.
-    Deliver the link via 1Password (single-use, expires).
+  - Mint a signup-token URL — easiest from this shell:
+        chat-invite                  # defaults: 1 use, 7-day expiry, chat-users
+        chat-invite -n 5 -d 30 --copy
+    (Reads the API key from "Pocket-ID Admin API" in 1Password; create
+    that item once via \`op-creds-bootstrap\`.)
+    GUI equivalent: Pocket-ID → Signup Tokens → Create. The URL pattern
+    is https://${FQDN}:8443/st/<token>. Deliver via 1Password.
   - They install Tailscale, accept the share, open the link to enrol a
     passkey, then visit https://${FQDN}/.
 
