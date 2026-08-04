@@ -149,7 +149,8 @@ two `run_*` that fire every apply, called out below):
    - Dev: uv, mise, node, pi-coding-agent (Mario Zechner's `pi`
      coding-agent CLI — Claude Code competitor; smoke-test with
      `pi-smoke`, optionally `pi-smoke --live` for a round-trip).
-   - Rust toolchain: rustup, cargo-binstall.
+   - Rust toolchain: rustup, cargo-binstall, wild-linker/wild/wild (fast
+     parallel linker — opt in per machine via `~/.cargo/config.toml`).
    - Productivity: raycast, aerospace, karabiner-elements, linearmouse
      (mouse customisation), 1password, 1password-cli, tailscale-app,
      claude (Anthropic desktop), claude-code (Anthropic's `claude`

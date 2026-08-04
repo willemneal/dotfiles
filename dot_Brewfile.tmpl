@@ -5,6 +5,7 @@
 
 # Third-party taps
 tap "nikitabobko/tap"   # aerospace
+tap "wild-linker/wild"  # wild linker
 tap "xykong/tap"        # flux-markdown (QuickLook)
 
 # CLI essentials
@@ -60,6 +61,7 @@ brew "pi-coding-agent" # `pi` CLI — Mario Zechner's Claude-Code-style coding a
 # default for the Rust CLIs above.
 brew "rustup"
 brew "cargo-binstall"
+brew "wild-linker/wild/wild"  # fast parallel linker — cuts Rust link times; wire up via ~/.cargo/config.toml
 {{ if has .chezmoi.hostname .hosts.ai_machines }}
 # AI (host-gated)
 brew "llama.cpp"
