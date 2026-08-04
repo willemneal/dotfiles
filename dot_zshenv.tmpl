@@ -12,6 +12,20 @@ export VISUAL="$EDITOR"
 # agent instead of 1Password and report no identities.
 export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
 
+# Restore terminal state after every ssh exit. Remote programs (zellij,
+# tmux, vim) that die without clean teardown — network drop, kill -9,
+# remote reboot — leave us in alt-screen + raw mode + mouse-reporting,
+# which paints control chars and never recovers on its own.
+ssh() {
+  command ssh "$@"
+  local rc=$?
+  stty sane 2>/dev/null
+  # disable mouse reporting (1000/1002/1003/1006), show cursor,
+  # exit both alt-screen variants (47/1049), then RIS for good measure.
+  printf '\033[?1000l\033[?1002l\033[?1003l\033[?1006l\033[?25h\033[?47l\033[?1049l\033c'
+  return $rc
+}
+
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export MODELS_DIR="$HOME/Models"
 # export HF_HOME="/Volumes/External/hf"
